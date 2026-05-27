@@ -1,0 +1,59 @@
+# MetaEnsemble evaluation default config.
+#
+# Read by `metaensemble eval` to set per-cycle parameters. Override on
+# the command line with `--seeds`, `--budget-usd`, etc.
+
+cycle:
+  # Number of seeds per cell. Smoke = 1, full = 5, very thorough = 10.
+  seeds: 5
+  # Per-run USD budget passed to `claude --max-budget-usd`. A run that
+  # exceeds the budget counts as a failure for `pass@budget`.
+  budget_usd: 0.30
+  # Default models for each role in a cell. Cheap models handle
+  # parsing/pre-flight; the executor uses the manifest tier;
+  # the reviewer and synthesizer go higher only when needed.
+  model_routing:
+    parser: claude-haiku-4-5
+    executor: claude-sonnet-4-6
+    reviewer: claude-sonnet-4-6
+    synthesizer: claude-opus-4-7
+
+cells:
+  # Three baselines plus the canonical full system.
+  - id: B1_single_agent
+    kind: baseline
+    description: One model call, no Coordinator protocol, no Manifest, no Ledger.
+  - id: B2_single_agent_prompted
+    kind: baseline
+    description: B1 plus a strong system prompt naming role + acceptance criteria.
+  - id: B3_subagent_default
+    kind: baseline
+    description: Runtime's default subagent path; no MetaEnsemble layer.
+  - id: B4_best_prompt
+    kind: baseline
+    description: Best-effort single-agent baseline with same Manifest pointers
+      and acceptance criteria as MM. The strongest competitor MM has to beat.
+  - id: MM_full
+    kind: full_system
+    description: Coordinator + Manifest + Ledger + Quality gate.
+  # Three ablations.
+  - id: MM_minus_manifest
+    kind: ablation
+    description: Coordinator dispatches without composing a typed contract.
+  - id: MM_minus_ledger
+    kind: ablation
+    description: Coordinator dispatches without recording Run rows.
+    # Harness logs externally so removing the Ledger does not break measurement.
+  - id: MM_minus_quality_gate
+    kind: ablation
+    description: Coordinator dispatches without post-Deliverable quality check.
+
+reporting:
+  # Confidence interval method for pass-rates.
+  confidence: wilson_95
+  # Token-waste threshold (D-9). Failed-run waste above this fraction of
+  # total tokens blocks a "ship" verdict.
+  failed_run_waste_threshold: 0.10
+  # Orchestration-overhead ceiling (D-8). MM tokens / B4 tokens above
+  # this ratio blocks a "ship" verdict.
+  overhead_ratio_ceiling: 2.0

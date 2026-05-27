@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  test:
+    name: Test (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install package and test dependencies
+        run: pip install -e ".[test]"
+
+      - name: Run tests (including CI-gated perf benchmarks)
+        run: pytest metaensemble/tests/ -v
+
+      - name: Vocabulary contract gate (no retired CLI surface in launch-facing code)
+        run: pytest metaensemble/tests/test_no_retired_vocabulary.py -v
+
+      - name: Run eval replay tier
+        run: metaensemble eval --tier replay --cells all
+
+      - name: Run wheel artifact smoke
+        run: pytest metaensemble/tests/test_wheel_smoke.py -v
+
+      - name: Run dependency advisory audit
+        run: |
+          pip install pip-audit
+          pip-audit
+
+      - name: Publish local wheel digest
+        run: |
+          export SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)"
+          python -m build --wheel
+          python - <<'PY'
+          import hashlib
+          from pathlib import Path
+          wheel = sorted(Path("dist").glob("metaensemble-*.whl"))[-1]
+          digest = hashlib.sha256(wheel.read_bytes()).hexdigest()
+          print(f"{wheel.name} sha256:{digest}")
+          PY

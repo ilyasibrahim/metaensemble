@@ -1,0 +1,90 @@
+# Suite B — domain-specific classification smoke fixture.
+#
+# STATUS: SMOKE SUITE.
+#
+# Twelve labeled items is not enough to make calibration claims. This
+# file is the smoke suite: it proves the
+# pipeline end-to-end and lets a regression run in CI without
+# real-money API spend. It is NOT the calibration set.
+#
+# This fixture's current labels happen to use a narrow Somali dialect
+# classification task. That is an eval fixture, not MetaEnsemble's product
+# scope. MetaEnsemble is project-agnostic.
+#
+# Smoke items are written by a non-native Somali reader using
+# published dialect references. They are deliberately easy — clearly
+# Northern/Standard Somali — so a pass means the pipeline works,
+# not that the model is calibrated.
+
+items:
+  - id: b_smoke_01
+    text: "Maxaa waaye sababta aad maanta ii soo wici weyday, ma mashquul baad ahayd?"
+    gold_label: northern_standard
+    acceptable_labels: [northern_standard]
+    notes: |
+      Clear Northern Somali markers: "wici weyday" (negative habitual)
+      and the interrogative "ma … baad ahayd" pattern.
+
+  - id: b_smoke_02
+    text: "Meeqo qof baa shirka yimid, yaase ka hadlay arrintaas?"
+    gold_label: northern_standard
+    acceptable_labels: [northern_standard]
+    notes: |
+      "Baa" focus marker + "yimid" verb form pin the dialect to
+      Northern/Standard.
+
+  - id: b_smoke_03
+    text: "Sidee laga yaabaa in arrintaan loo xalliyo si toosan?"
+    gold_label: northern_standard
+    acceptable_labels: [northern_standard]
+    notes: Standard register; common in news/formal speech.
+
+  - id: b_smoke_04
+    text: "Markii uu yimid, waxaan u sheegay inay tahay arrin muhiim ah."
+    gold_label: northern_standard
+    acceptable_labels: [northern_standard]
+
+  - id: b_smoke_05
+    text: "Waxaan tagay suuqa subaxnimo, badda agteeda."
+    gold_label: northern_standard
+    acceptable_labels: [northern_standard]
+
+  - id: b_smoke_06
+    text: "Maxaad u maleyneysaa inay ka jirto fursad cusub?"
+    gold_label: northern_standard
+    acceptable_labels: [northern_standard]
+
+  - id: b_smoke_07
+    text: "Sannadkaan dugsiga ardayda waa la kordhay."
+    gold_label: northern_standard
+    acceptable_labels: [northern_standard]
+
+  - id: b_smoke_08
+    text: "Markaa sidee ayaad mooddaa arrintaas?"
+    gold_label: northern_standard
+    acceptable_labels: [northern_standard]
+
+  - id: b_smoke_09
+    text: "Wax ka qabasho ah waa la sameeyay, balse natiijada lama hubo."
+    gold_label: northern_standard
+    acceptable_labels: [northern_standard]
+
+  - id: b_smoke_10
+    text: "Haddii aanan tegin, ma waxaa lagaa filan inaad ka soo qaybgasho?"
+    gold_label: northern_standard
+    acceptable_labels: [northern_standard]
+
+  - id: b_smoke_11
+    text: "Cuntada caawa waa fiicnaa, mahad waxaad leedahay."
+    gold_label: northern_standard
+    acceptable_labels: [northern_standard]
+
+  - id: b_smoke_12
+    text: "Khayraadka dalka ku jira waxay u baahan yihiin maamul fiican."
+    gold_label: northern_standard
+    acceptable_labels: [northern_standard]
+
+# Acceptable labels left as a singleton set on every item is part of the
+# smoke-only contract. The calibration set will carry richer alternative
+# labels (Maay, Benadiri, Northern, mixed, code-switching) per the
+# failure-mode catalog the system card promises.

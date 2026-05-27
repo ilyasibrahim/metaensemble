@@ -1,0 +1,36 @@
+-- 003_run_provenance.sql — backfill columns for run provenance + token economics.
+--
+-- Every Run row should record enough evidence to support the documented
+-- claim that the Ledger captures
+-- "the Executor, Role version, model, tool use, token cost, files
+-- touched, output, gate state, review findings, and final outcome."
+-- These are ALL additive columns (TEXT, INTEGER NOT NULL DEFAULT 0)
+-- and so live entirely inside the application-side `_BACKFILL_COLUMNS`
+-- machinery. This file is kept as documentation of the schema delta;
+-- the columns are added by `Ledger.initialize` via `PRAGMA table_info`
+-- + `ALTER TABLE ADD COLUMN`.
+--
+-- Columns introduced:
+--   role_version           TEXT     Snapshot of the Role spec version used
+--                                   for this Run, preserving accountability
+--                                   even if the Role changes later.
+--   requested_model_tier   TEXT     The manifest-declared tier the Coordinator asked for
+--                                   (may differ from `model`, which records the runtime-
+--                                   observed model when a transcript is available).
+--   model_source           TEXT     Where `model` came from: transcript when exact,
+--                                   statusline when session-local runtime data was fresh,
+--                                   or tier_fallback when only the requested tier was known.
+--   deliverable_ref_json   TEXT     Structured deliverable reference; see core.lib.recording
+--                                   for the contract. Replaces the strict path-only contract.
+--   files_touched_json     TEXT     JSON array of file paths the subagent wrote/edited,
+--                                   sourced from transcript walking.
+--   tool_use_json          TEXT     JSON array of {name, count, tokens?} per tool the
+--                                   subagent invoked, sourced from transcript walking.
+--   review_findings_json   TEXT     JSON array of {axis, state, findings[]} aggregating
+--                                   quality-gate findings + any peer-review verdicts.
+--   cache_read_tokens      INTEGER  Anthropic cache-read tokens for the Run, when reported.
+--   cache_create_tokens    INTEGER  Anthropic cache-creation tokens for the Run, when reported.
+--   orchestration_tokens   INTEGER  Tokens attributable to MetaEnsemble orchestration
+--                                   (manifest YAML, brief composition, hooks) — separate
+--                                   from the Executor's output tokens so overhead is
+--                                   visible in W11 metrics.

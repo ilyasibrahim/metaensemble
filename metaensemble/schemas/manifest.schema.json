@@ -1,0 +1,142 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://metaensemble.dev/schemas/manifest.schema.json",
+  "title": "Manifest",
+  "description": "Typed handoff contract between Executors. YAML on disk, validated as JSON. See ARCHITECTURE.md §7.",
+  "type": "object",
+  "required": ["manifest_id", "version", "task", "context", "expected_deliverables", "constraints"],
+  "additionalProperties": false,
+  "properties": {
+    "manifest_id": {
+      "type": "string",
+      "pattern": "^hm-[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "description": "UUIDv7-derived ID with 'hm-' prefix."
+    },
+    "version": {
+      "type": "integer",
+      "const": 1
+    },
+    "from": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]{0,7}-[0-9a-f]{3}$"
+    },
+    "to": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]{0,7}-[0-9a-f]{3}$"
+    },
+    "task": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "context": {
+      "type": "object",
+      "required": ["files"],
+      "additionalProperties": false,
+      "properties": {
+        "prior_runs": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "files": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["path"],
+            "additionalProperties": false,
+            "properties": {
+              "path": { "type": "string" },
+              "lines": { "type": "string", "pattern": "^\\d+(-\\d+)?$" },
+              "role": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "expected_deliverables": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["path"],
+        "additionalProperties": false,
+        "properties": {
+          "path": { "type": "string" },
+          "must_export": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "coverage": { "type": "string" },
+          "schema": { "type": "string" }
+        }
+      }
+    },
+    "constraints": {
+      "type": "object",
+      "required": ["model_tier", "window_budget"],
+      "additionalProperties": false,
+      "properties": {
+        "model_tier": { "type": "string", "enum": ["opus", "sonnet", "haiku"] },
+        "window_budget": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "acceptance": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "peer_review": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Cross-Role validation policy. See ARCHITECTURE.md §11 (Peer review).",
+      "properties": {
+        "mandatory_for_reversibility": {
+          "type": "boolean",
+          "description": "If true, peer review fires automatically when the Task action is irreversible."
+        },
+        "reviewer_role_must_differ": {
+          "type": "boolean",
+          "description": "If true, the reviewing Role must differ from the executing Role. Default true."
+        },
+        "min_reviewers": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "dissent_handling": {
+          "type": "string",
+          "enum": ["surface_minority", "majority_wins"],
+          "description": "How to synthesize splits. Default surface_minority."
+        }
+      }
+    },
+    "extras": {
+      "type": "object",
+      "description": "Open-shape map for reference material the Coordinator wants the receiving Executor to consult but the contract does not verify. Schema-validated only as 'is an object'; the Coordinator owns the inner shape. Examples: rationale strings, design-token tables, hero copy, KPI specifications. Anything that belongs to the typed contract goes in the typed fields, not here."
+    },
+    "delegates_to": {
+      "type": "array",
+      "description": "Team composition: sibling sub-Roles the Coordinator dispatches in parallel as part of this Task. Each member becomes its own Run sharing the Manifest's task_id with the others. The Coordinator (not a subagent head) synthesizes the members' Deliverables into one report. This is MetaEnsemble v0.1's M-form-shaped pattern; Claude's runtime does not permit subagents to invoke Agent themselves, so the team head is always the Coordinator. Optional; omit for a single-specialist dispatch.",
+      "items": {
+        "type": "object",
+        "required": ["role"],
+        "additionalProperties": false,
+        "properties": {
+          "role": {
+            "type": "string",
+            "description": "Role identifier of the team-member the Coordinator will dispatch."
+          },
+          "purpose": {
+            "type": "string",
+            "description": "What the team-member is expected to deliver, in one sentence."
+          },
+          "budget_pct_of_head": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "description": "Suggested fraction of the Manifest's `window_budget` to allocate to this team-member's Run. Sums across `delegates_to` entries should not exceed 100."
+          }
+        }
+      }
+    }
+  }
+}

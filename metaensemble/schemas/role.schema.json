@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://metaensemble.dev/schemas/role.schema.json",
+  "title": "Role",
+  "description": "MetaEnsemble Role specification (frontmatter of roles/<role_id>.md). See ARCHITECTURE.md §12 for the lifecycle this spec governs.",
+  "type": "object",
+  "required": ["name", "version", "description", "model_tier"],
+  "additionalProperties": false,
+  "properties": {
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]{0,31}$",
+      "description": "Role identifier; lowercase, 1-32 chars, alphanumeric with hyphens or underscores."
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "description": "Semantic version (major.minor.patch). Major bumps flag existing Executors for review."
+    },
+    "description": {
+      "type": "string",
+      "minLength": 10,
+      "maxLength": 500,
+      "description": "Short description of the Role's responsibilities."
+    },
+    "model_tier": {
+      "type": "string",
+      "enum": ["opus", "sonnet", "haiku"],
+      "description": "Default model tier for this Role's Executors."
+    },
+    "alias_prefix": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]{0,7}$",
+      "description": "Prefix for Executor aliases (1-8 alphanumeric chars). Defaults to first 4 chars of name."
+    },
+    "allowed_tools": {
+      "type": "array",
+      "items": { "type": "string" },
+      "uniqueItems": true,
+      "description": "Tools this Role's Executors may invoke. Defaults to the runtime's default set."
+    },
+    "color": {
+      "type": "string",
+      "enum": ["red", "orange", "yellow", "green", "cyan", "blue", "purple", "pink"],
+      "description": "Display color shown by Claude Code for Executors of this Role in the task list and transcript. One of the eight values Claude Code accepts in its sub-agent frontmatter."
+    },
+    "output_styles": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "default": { "type": "string" },
+        "wire": { "type": "string" },
+        "deliverable": { "type": "string" }
+      }
+    },
+    "onboarding": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Loaded into the Brief on first dispatch of any Executor of this Role. See ARCHITECTURE.md §12.2.",
+      "properties": {
+        "read_first": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Paths to Deliverables this Role should read before its first Run."
+        },
+        "coordinate_with": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[a-z][a-z0-9_-]{0,31}$" },
+          "description": "Adjacent Roles this Role often interacts with."
+        },
+        "conventions": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Paths to project conventions (review checklists, style guides)."
+        },
+        "mentor_role": {
+          "type": ["string", "null"],
+          "pattern": "^[a-z][a-z0-9_-]{0,31}$",
+          "description": "An existing Role with similar work, for context. Optional."
+        }
+      }
+    }
+  }
+}

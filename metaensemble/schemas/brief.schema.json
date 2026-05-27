@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://metaensemble.dev/schemas/brief.schema.json",
+  "title": "Brief",
+  "description": "Wire-format message between Executors. Terse JSON, machine-targeted. See ARCHITECTURE.md §6.",
+  "type": "object",
+  "required": ["v", "brief_id", "from", "to", "task_id", "tier"],
+  "additionalProperties": false,
+  "properties": {
+    "v": {
+      "type": "integer",
+      "const": 1,
+      "description": "Brief schema version. Readers refuse unknown versions."
+    },
+    "brief_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "description": "UUIDv7 of the Brief, standard 36-char hex form."
+    },
+    "from": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]{0,7}-[0-9a-f]{3}$",
+      "description": "Alias of the sending Executor."
+    },
+    "to": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]{0,7}-[0-9a-f]{3}$",
+      "description": "Alias of the receiving Executor."
+    },
+    "task_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "description": "Task identifier."
+    },
+    "ctx": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "prior_runs": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "files": {
+          "type": "array",
+          "description": "Compact pairs of [path, line-range] for typed handoff.",
+          "items": {
+            "type": "array",
+            "prefixItems": [
+              { "type": "string" },
+              { "type": "string" }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+          }
+        }
+      }
+    },
+    "out": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "files": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "schema": { "type": "string" }
+      }
+    },
+    "tier": {
+      "type": "string",
+      "enum": ["opus", "sonnet", "haiku"]
+    },
+    "budget": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Token budget for this Brief's Run."
+    }
+  }
+}

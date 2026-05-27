@@ -1,0 +1,16 @@
+{
+  "active": [
+    "code-quality",
+    "devops"
+  ],
+  "inactive": [
+    "architect",
+    "backend",
+    "data-engineer",
+    "docs",
+    "frontend",
+    "ml-engineer",
+    "test-engineer"
+  ],
+  "notes": "Pure IaC. devops via .github/workflows + *.tf files. code-quality via .pre-commit-config.yaml. No app code -> backend/frontend off."
+}

@@ -1,0 +1,24 @@
+# Default: text files use LF endings in the repo, OS-native in the working tree.
+* text=auto eol=lf
+
+# Python sources are explicitly LF
+*.py text eol=lf
+*.pyi text eol=lf
+
+# Markdown, YAML, JSON, SQL — text
+*.md text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.json text eol=lf
+*.sql text eol=lf
+*.toml text eol=lf
+
+# Shell scripts must be LF or they break on Linux
+*.sh text eol=lf
+
+# Binary files (none today, future-proof)
+*.png binary
+*.jpg binary
+*.gif binary
+*.ico binary
+*.db binary

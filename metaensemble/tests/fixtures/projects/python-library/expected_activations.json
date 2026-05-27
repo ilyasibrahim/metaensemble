@@ -1,0 +1,16 @@
+{
+  "active": [
+    "code-quality",
+    "docs",
+    "test-engineer"
+  ],
+  "inactive": [
+    "architect",
+    "backend",
+    "data-engineer",
+    "devops",
+    "frontend",
+    "ml-engineer"
+  ],
+  "notes": "Pure library fixture. code-quality via pyproject [tool.mypy]/[tool.ruff]. test-engineer via tests/ + pyproject [tool.pytest]. docs via docs/ + 3 markdown files. No ARCHITECTURE.md, no api/server dir, no docker -> architect/backend/devops correctly inactive."
+}

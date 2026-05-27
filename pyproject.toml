@@ -1,0 +1,87 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "metaensemble"
+version = "0.1.0"
+description = "A typed runtime for ensembles of cognitive agents"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
+dependencies = [
+  "jsonschema>=4.20",
+  "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+# `[test]` is the canonical CI install profile. It includes every dependency
+# the test suite executes against, so `pip install -e ".[test]" && pytest`
+# is the one-shot reproducer for a fresh contributor. The local-only quality
+# runners are present here so the quality-gate integration tests assert real
+# tool behavior rather than tool-absent skip paths.
+test = [
+  "pytest>=7.0",
+  "pytest-cov>=4.0",
+  "bandit>=1.7",      # security — Python static analysis (local)
+  "ruff>=0.5",        # maintainability — linter (local)
+  "radon>=6.0",       # complexity — cyclomatic per function (local)
+  "coverage>=7.0",    # coverage delta — line-coverage report (local)
+  "build>=1.0",       # wheel build — used by test_wheel_smoke
+]
+
+# `[quality]` is the production runtime profile for the quality gate.
+# It is a superset of the local runners in `[test]` plus pip-audit, which
+# reaches over the network for advisory data and therefore does not belong
+# in the per-PR CI install.
+quality = [
+  "bandit>=1.7",
+  "ruff>=0.5",
+  "radon>=6.0",
+  "coverage>=7.0",
+  "pip-audit>=2.6",   # security — dependency advisories (network)
+]
+
+[project.scripts]
+metaensemble = "metaensemble.cli:main"
+
+[tool.setuptools]
+include-package-data = false
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["metaensemble*", "evals*"]
+exclude = ["metaensemble.tests", "metaensemble.tests.*"]
+
+[tool.setuptools.package-data]
+metaensemble = [
+  "commands/*.md",
+  "config/*.yaml",
+  "output-styles/*.md",
+  "roles/*.md",
+  "schemas/*.json",
+  "skills/*/*.md",
+  "state/migrations/*.sql",
+  "statusline/*.py",
+]
+evals = [
+  "README.md",
+  "configs/*.yaml",
+  "datasets/**/*.yaml",
+  "cassettes/*.md",
+  "cassettes/*.json",
+  "cassettes/*.jsonl",
+  "cassettes/**/*.json",
+  "cassettes/**/*.jsonl",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["metaensemble/tests"]
+python_files = ["test_*.py"]
+addopts = "-q"
+# Don't collect from fixture corpora — they are data, not tests.
+norecursedirs = ["fixtures"]
+markers = [
+  "slow: slower integration tests (e.g. wheel build + venv install). Skipped by default in dev with `-m 'not slow'`; run in CI.",
+]

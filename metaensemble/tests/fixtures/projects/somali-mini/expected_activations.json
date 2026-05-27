@@ -1,0 +1,16 @@
+{
+  "active": [
+    "architect",
+    "code-quality",
+    "data-engineer",
+    "devops",
+    "docs",
+    "ml-engineer",
+    "test-engineer"
+  ],
+  "inactive": [
+    "backend",
+    "frontend"
+  ],
+  "notes": "Mirrors the real Somali Dialect Classifier signal set. backend/frontend stay inactive because no api/server dir, no web framework dep, no React/Vue/Svelte files."
+}

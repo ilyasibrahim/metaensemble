@@ -1,0 +1,16 @@
+{
+  "active": [
+    "architect",
+    "data-engineer",
+    "docs"
+  ],
+  "inactive": [
+    "backend",
+    "code-quality",
+    "devops",
+    "frontend",
+    "ml-engineer",
+    "test-engineer"
+  ],
+  "notes": "dbt project. data-engineer via dbt_project.yml. docs via 3 markdown files. architect via docs/ARCHITECTURE.md. ml-engineer correctly OFF because the `models/` directory holds dbt SQL, not ML artifacts; the detector routes models/ to data-engineer when dbt_project.yml is present."
+}

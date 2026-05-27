@@ -1,0 +1,72 @@
+# MetaEnsemble budget configuration — example
+#
+# Copy this file to one of two locations to activate it:
+#   - User layer:    ~/.metaensemble/budgets.yaml
+#   - Project layer: <project>/.metaensemble/budgets.yaml
+#
+# Project values override User values, which override the Core defaults
+# encoded in `metaensemble/lib/config.py`. The defaults shown here match those
+# defaults; you only need to set values that differ from them.
+#
+# See ARCHITECTURE.md §9 (Cost gating) for the design.
+#
+# The cost gate is two-axis:
+#   Axis 1 — run size (this dispatch vs the window capacity)
+#   Axis 2 — window headroom (how much of the window is left)
+# Either axis can escalate to NOTIFY or BLOCK. Final state is the worst
+# of the two. Irreversibility and novelty are independent hard-blocks
+# on top.
+
+thresholds:
+  # AXIS 1 — run size, expressed as percentage of WINDOW CAPACITY.
+  # "Block any single dispatch that exceeds 40% of my whole window."
+  run_soft_pct_of_capacity: 20   # substantive dispatch — NOTIFY at this point
+  run_hard_pct_of_capacity: 40   # outsized dispatch — BLOCK for explicit OK
+
+  # AXIS 2 — window headroom, expressed as percentage of capacity STILL
+  # REMAINING. "Warn when only 30% of the window is left" /
+  # "Block all dispatches when only 10% is left."
+  window_warn_pct_remaining: 30
+  window_block_pct_remaining: 10
+
+  # WINDOW CAPACITY — tokens (input + output) for the user's plan's
+  # 5-hour cap.
+  #
+  # IMPORTANT: the value below is a FALLBACK used only when MetaEnsemble
+  # cannot read the runtime's authoritative `rate_limits` field. With
+  # the statusline integration installed (which `metaensemble user-setup`
+  # registers by default), the cost gate DERIVES capacity from the
+  # runtime's own per-session rate-limit feed — Claude Code v2.1.80+
+  # exposes the 5-hour window's `used_percentage` to statusline scripts
+  # on every refresh, and MetaEnsemble's statusline captures it. The
+  # derived capacity tracks plan changes (Pro / Max-5 / Max-20)
+  # automatically; the fallback below is only consulted when no fresh
+  # native data is available (e.g., before the first session refresh).
+  window_capacity_tokens: 88000
+
+# Actions matched against the irreversible list always block, regardless
+# of cost, and trigger mandatory peer review per ARCHITECTURE §11.
+# Patterns are matched conservatively; when in doubt, the gate blocks.
+irreversible_actions:
+  - "Write to existing files"
+  - "Bash matching git push|rm |DROP |DELETE "
+  - "any non-localhost network call"
+
+# Novelty escalation: the first time the Ledger sees a new Manifest
+# pattern, the gate blocks for Principal review. After the configured
+# number of successful Runs, the pattern de-escalates to notify, then
+# auto. Set `treat_first_run_of_pattern_as_block` to false to disable
+# the novelty escalation entirely.
+novelty:
+  treat_first_run_of_pattern_as_block: true
+  drop_to_notify_after_n_runs: 2
+  drop_to_auto_after_n_runs: 3
+
+# Capacity calibration: when true (default), the cost gate prefers the
+# runtime's native `rate_limits` feed over the `window_capacity_tokens`
+# value above. The fallback is used only when no fresh native data is
+# available. Set to false to pin capacity to the manual value (useful
+# for testing or for users who want predictable behavior independent
+# of the runtime's reporting).
+capacity_calibration:
+  auto_calibrate_capacity: true

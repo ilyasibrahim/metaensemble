@@ -1,0 +1,123 @@
+# Suite A — eight software-engineering tasks.
+#
+# Each task gates the cell's pass-rate against measurable acceptance
+# criteria. The starting state is a frozen Git SHA so re-runs are
+# reproducible; the acceptance criteria are executed by `runners/api.py`
+# after the cell's deliverable lands.
+
+tasks:
+  - id: a1_bugfix_off_by_one
+    title: Fix an off-by-one in a paginator
+    description: |
+      The paginator at `pagination.py:42` returns one fewer item than
+      expected on every page boundary. Locate and fix the bug; add a
+      regression test.
+    starting_repo: oss-fixture-paginator
+    starting_sha: __DEFERRED__
+    acceptance:
+      - kind: build_passes
+      - kind: test_count_at_least
+        value: 5
+      - kind: lint_clean
+      - kind: file_modified
+        path: pagination.py
+      - kind: file_modified
+        path: test_pagination.py
+
+  - id: a2_refactor_module
+    title: Split a 600-line module into three cohesive files
+    description: |
+      The module `legacy/big_module.py` (612 lines) has three responsibilities.
+      Split it into three files preserving the public API. No behavior change.
+    starting_repo: oss-fixture-legacy
+    starting_sha: __DEFERRED__
+    acceptance:
+      - kind: build_passes
+      - kind: test_count_at_least
+        value: 12
+      - kind: api_surface_preserved
+
+  - id: a3_doc_update
+    title: Document split rollback commands in USER-GUIDE
+    description: |
+      The CLI has separate project and user rollback commands:
+      `metaensemble unadopt --purge-state` and
+      `metaensemble user-teardown --purge-state`. Add a paragraph to
+      USER-GUIDE.md under the rollback section.
+    starting_repo: metaensemble
+    starting_sha: __DEFERRED__
+    acceptance:
+      - kind: markdown_links_resolve
+      - kind: file_modified
+        path: USER-GUIDE.md
+
+  - id: a4_test_addition
+    title: Add tests for the reconcile module
+    description: |
+      The `metaensemble.lib.reconcile` module has 8 tests covering Layer-1 and
+      Layer-2 reconcile. Add a test that asserts a sidecar's
+      `manifest_id` survives reconciliation into the Run row.
+    starting_repo: metaensemble
+    starting_sha: __DEFERRED__
+    acceptance:
+      - kind: build_passes
+      - kind: test_count_delta_at_least
+        value: 1
+      - kind: file_modified
+        path: metaensemble/tests/test_reconcile.py
+
+  - id: a5_design_review
+    title: Review the uninstall-mode design
+    description: |
+      Read the "Uninstall modes" and "Recovery and rollback" sections of
+      DEPLOYMENT.md and produce a one-page review
+      (`reports/<date>-uninstall-review.md`) naming at least three risks
+      the documented design does not address.
+    starting_repo: metaensemble
+    starting_sha: __DEFERRED__
+    acceptance:
+      - kind: file_exists
+        glob: reports/*-uninstall-review.md
+      - kind: word_count_at_least
+        value: 300
+
+  - id: a6_security_review
+    title: Security-review the new transcript walker
+    description: |
+      The new `metaensemble/lib/transcript.py` reads JSONL from `transcript_path`.
+      Write `reports/<date>-transcript-security.md` listing every defensive
+      assumption and one concrete attack the walker survives.
+    starting_repo: metaensemble
+    starting_sha: __DEFERRED__
+    acceptance:
+      - kind: file_exists
+        glob: reports/*-transcript-security.md
+
+  - id: a7_perf_tune
+    title: Tune `get_window_burn` to <5ms p95 on 100k Runs
+    description: |
+      Current p95 is 9ms on 100k Runs. Add the missing index and assert the
+      new p95 in `metaensemble/tests/test_perf_ledger.py`.
+    starting_repo: metaensemble
+    starting_sha: __DEFERRED__
+    acceptance:
+      - kind: build_passes
+      - kind: perf_benchmark_passes
+        benchmark: test_get_window_burn_meets_p95
+
+  - id: a8_infra_change
+    title: Add the no-quality CI matrix axis
+    description: |
+      The CI workflow should run pytest a second time with the quality
+      runners absent. Update `.github/workflows/ci.yml` and
+      add `@pytest.mark.requires_radon` / `requires_bandit` markers to
+      the tests that need them.
+    starting_repo: metaensemble
+    starting_sha: __DEFERRED__
+    acceptance:
+      - kind: ci_yaml_has_matrix_axis
+        axis: no-quality
+
+# Per W8 sign-off, every starting_sha resolves to a real commit before
+# the harness ships its first benchmark. The __DEFERRED__ values are
+# placeholders so the test-time loader does not need a network round-trip.

@@ -1,0 +1,16 @@
+{
+  "active": [
+    "backend",
+    "devops",
+    "frontend",
+    "test-engineer"
+  ],
+  "inactive": [
+    "architect",
+    "code-quality",
+    "data-engineer",
+    "docs",
+    "ml-engineer"
+  ],
+  "notes": "Django web app fixture. backend on (manage.py + django dep). frontend on (HTML files under templates). test-engineer on (tests/ + pytest.ini). devops on (Dockerfile). No ARCHITECTURE.md so architect off. No mypy/ruff/pre-commit so code-quality off."
+}

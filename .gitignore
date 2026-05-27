@@ -1,0 +1,29 @@
+.DS_Store
+*.swp
+*.swo
+__pycache__/
+*.pyc
+.venv/
+venv/
+node_modules/
+*.egg-info/
+
+# Local MetaEnsemble adoption state; derived per machine.
+.metaensemble/
+
+# Internal planning and launch notes; local only.
+_internal/
+
+# Session deliverables and audit outputs — re-generated per dispatch,
+# not source. Keep curated examples in docs instead.
+reports/
+evals/reports/
+
+.pytest_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+build/
+dist/
+.claude/

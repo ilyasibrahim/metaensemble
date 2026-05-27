@@ -1,0 +1,53 @@
+# MetaEnsemble quality-gate configuration — example
+#
+# Copy this file to one of two locations to activate it:
+#   - User layer:    ~/.metaensemble/quality.yaml
+#   - Project layer: <project>/.metaensemble/quality.yaml
+#
+# Project values override User values, which override the core defaults
+# encoded in `metaensemble/lib/config.py` (the `_DEFAULT_QUALITY` block). The
+# values shown here match those defaults; you only need to set values
+# you want to differ.
+#
+# See ARCHITECTURE.md §10 (Quality gating) for the design rationale
+# and the industry sources the thresholds anchor on (SonarQube,
+# Snyk, NISTIR 8397, McCabe, DORA).
+
+# Axis 1 — Correctness. Runs the project's pytest suite when a dispatch
+# produces Python deliverables and classifies by failure count.
+correctness:
+  enabled: true
+  notify_failures: 1   # 1+ failing tests → NOTIFY
+  block_failures: 3    # 3+ failing tests → BLOCK
+
+# Axis 2 — Security. Runs bandit on the changed Python files and
+# classifies by the highest severity finding. Mirrors Snyk's defaults.
+security:
+  enabled: true
+  notify_severity: medium   # one or more medium-severity findings → NOTIFY
+  block_severity: high      # one or more high or critical findings → BLOCK
+
+# Axis 3 — Maintainability. Runs ruff on the changed Python files and
+# classifies by issue count, mapped to SonarQube-style A/B/C/D/E grades
+# (A: 0, B: 1–5, C: 6–15, D: 16–30, E: 30+).
+maintainability:
+  enabled: true
+  notify_issues: 6   # 6+ ruff issues across changed files → NOTIFY (grade C)
+  block_issues: 16   # 16+ → BLOCK (grade D or E)
+
+# Axis 4 — Complexity. Runs radon's cyclomatic-complexity check on the
+# changed Python files. Anchors on McCabe's stable 10-and-15 thresholds.
+complexity:
+  enabled: true
+  notify_above: 10   # any function above McCabe 10 → NOTIFY
+  block_above: 15    # any function above McCabe 15 → BLOCK
+
+# Axis 5 — Coverage delta. Reads coverage.py's last report from the
+# project's `.coverage` file. The absolute floor mirrors NISTIR 8397's
+# 80% line-coverage recommendation. v0.1 implements the absolute check
+# only; v0.2 will extend with a committed baseline for true delta.
+coverage:
+  enabled: true
+  notify_drop_pp: 5.0           # 5 percentage-point drop vs baseline → NOTIFY
+  block_drop_pp: 5.0            # 5pp drop → BLOCK
+  block_absolute_below: 80.0    # coverage below 80% → BLOCK regardless of delta
