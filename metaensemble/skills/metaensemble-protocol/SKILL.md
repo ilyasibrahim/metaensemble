@@ -62,6 +62,19 @@ When dispatching, name the style explicitly in the prompt body — `[output_styl
 
 ---
 
+## Executor identity in Principal-facing status
+
+`agentId` (e.g. `a83b9605...`) is the **per-launch Claude Code background-task id** - an internal correlation key for the background dispatch lifecycle (`PostToolUse(Agent)` to the subagent's writes to `SubagentStop`). It is **not** the Executor's identity and **must not** appear in Principal-facing text.
+
+Surface Executors by their MetaEnsemble **alias + role + Agent description**, never by `agentId`:
+
+- Good: `Dispatched devo-e3c/devops: Finish deployment workflow`
+- Bad: `Dispatched (agentId a83b9605...)`
+
+For a fresh dispatch the alias is the one the Ledger assigns (recoverable from the Run's `executor_id`); for a resumed dispatch it is the `[continuing: <alias>]` you passed. `agentId` stays in the recording/correlation layer only.
+
+---
+
 ## Ledger queries
 
 Use the named-query API in `metaensemble/lib/ledger.py`. Raw SQL outside that module is a review-blocking change (PERFORMANCE.md R1).
@@ -107,6 +120,15 @@ For every overlap:
 
 This is generic ownership, not a registry special case. If a project has a manual deliverable index, work registry, status ledger, or similar documentation and the decisions file assigns it to MetaEnsemble, omit that maintenance from Executor Briefs. The only unique value of the manual document is curated narrative; structural facts belong in the Ledger.
 
+## Report Location
+
+Read `<project>/.metaensemble/install-decisions.yaml` before choosing any report path. The `report_root` field is authoritative for new MetaEnsemble-authored report Deliverables:
+
+- Greenfield projects default to `.metaensemble/reports` because `.metaensemble/` is machine-local and ignored.
+- Existing projects keep their detected convention, such as `.claude/reports`, when inspection recorded that path in `report_root`.
+- Do not create both Executor reports and a Coordinator synthesis report by default. The Coordinator synthesizes in the Principal-facing response unless the Manifest explicitly declares a synthesis Markdown file as an `expected_deliverables` path.
+- For structural tracking, rely on the Ledger, `deliverable_ref_json`, `files_touched_json`, and `deliverables_index.jsonl`; do not maintain an extra registry unless `install-decisions.yaml` says the project owns or dual-owns that surface.
+
 ---
 
 ## Team dispatch — the Coordinator-as-head pattern
@@ -115,7 +137,7 @@ The agent runtime caps subagent recursion at depth one: subagents cannot invoke 
 
 **When to dispatch a team:** the Task decomposes into three or more substantive specialist sub-Tasks, or the total work exceeds a single dispatch's cap, or the Principal asks for a cross-functional outcome ("ship the password-reset feature").
 
-**How to dispatch a team:** compose a Manifest with a `delegates_to` block listing sub-Roles and budget shares. The Coordinator dispatches each member as its own Run in parallel — siblings under a shared `task_id`, not nested under a head Executor. Collect each member's Deliverable; synthesize into one report; surface dissent explicitly.
+**How to dispatch a team:** compose a Manifest with a `delegates_to` block listing sub-Roles and budget shares. The Coordinator dispatches each member as its own Run in parallel — siblings under a shared `task_id`, not nested under a head Executor. Collect each member's Deliverable; synthesize in the Principal-facing response unless the Manifest explicitly declares a synthesis report; surface dissent explicitly.
 
 ```yaml
 manifest_id: hm-...
@@ -125,7 +147,7 @@ context:
   files:
     - { path: src/auth/spec.md, lines: "1-120", role: design-spec }
 expected_deliverables:
-  - path: reports/auth/synthesis.md
+  - path: .metaensemble/reports/auth/synthesis.md
 constraints:
   model_tier: opus
   window_budget: 18000  # total across the team
@@ -135,7 +157,7 @@ delegates_to:
   - { role: security,      purpose: "review token-storage path",   budget_pct_of_head: 30 }
 ```
 
-Each member's budget is `budget_pct_of_head × window_budget`. The Ledger records each Run under the shared `task_id`. The Coordinator's synthesis Run is funded from the Principal's session budget, not the team budget. Team members do not dispatch further. Synthesize, do not concatenate. `--peer-review` and `--fanout` are specific instances of the team pattern; `delegates_to` is the general form.
+Each member's budget is `budget_pct_of_head × window_budget`. The Ledger records each Run under the shared `task_id`. A Coordinator synthesis report is funded from the Principal's session budget only when explicitly declared; otherwise synthesize in the response. Team members do not dispatch further. Synthesize, do not concatenate. `--peer-review` and `--fanout` are specific instances of the team pattern; `delegates_to` is the general form.
 
 ---
 

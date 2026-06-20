@@ -23,11 +23,15 @@ from metaensemble.lib.file_events import (  # noqa: E402
     is_within,
     nearest_project_root,
     read_active_dispatch,
+    read_active_dispatch_by_agent,
     read_active_dispatch_for_project,
     resolve_against_cwd,
     resolve_tool_paths,
 )
-from metaensemble.lib.overlaps import protected_overlap_for_path  # noqa: E402
+from metaensemble.lib.overlaps import (  # noqa: E402
+    protected_overlap_for_path,
+    report_root_for_project,
+)
 from metaensemble.lib.recording import coerce_to_text  # noqa: E402
 from metaensemble.lib.runtime_state import _encode_cwd_for_runtime  # noqa: E402
 
@@ -39,7 +43,14 @@ def _payload_cwd(payload: dict) -> Path:
     return Path.cwd()
 
 
-def _active_context(session_id: str, cwd: Path):
+def _active_context(session_id: str, cwd: Path, agent_id: str | None = None):
+    # Background path: authorize by the per-dispatch agentId first. This is the
+    # only correlation key that survives same-session fan-out.
+    if agent_id:
+        active = read_active_dispatch_by_agent(agent_id)
+        if active is not None:
+            return active, Path(active.project_root), Path(active.state_dir)
+    # Legacy session/project fallback — synchronous-runtime compatibility only.
     active = read_active_dispatch(session_id) if session_id else None
     if active is not None:
         return active, Path(active.project_root), Path(active.state_dir)
@@ -121,7 +132,13 @@ def _is_allowed_coordinator_write(path: Path, root: Path) -> bool:
     except ValueError:
         return False
     parts = rel.parts
-    return len(parts) >= 3 and parts[:2] == (".metaensemble", "manifests")
+    if len(parts) >= 3 and parts[:2] == (".metaensemble", "manifests"):
+        return True
+    report_root = root / report_root_for_project(root)
+    return path.suffix.lower() == ".md" and is_within(
+        path.resolve(strict=False),
+        report_root.resolve(strict=False),
+    )
 
 
 def _claude_project_state_dirs(cwd: Path, root: Path) -> tuple[Path, ...]:
@@ -212,10 +229,11 @@ def run() -> int:
         return 0
 
     session_id = payload.get("session_id") or ""
+    agent_id = payload.get("agent_id")
     hook_event = payload.get("hook_event_name") or ""
     cwd = _payload_cwd(payload)
     installed_root = nearest_project_root(cwd)
-    active, project_root, state_dir = _active_context(session_id, cwd)
+    active, project_root, state_dir = _active_context(session_id, cwd, agent_id)
     if project_root is None or state_dir is None:
         if (
             hook_event == "PreToolUse"

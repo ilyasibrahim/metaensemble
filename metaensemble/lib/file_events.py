@@ -24,6 +24,11 @@ class ActiveDispatch:
     project_root: str
     state_dir: str
     started_ts: str
+    # agentId is the per-dispatch runtime id for background subagents.
+    # tool_use_id links the PreToolUse(Agent) stamp to the PostToolUse(Agent)
+    # payload that first exposes agentId.
+    agent_id: str | None = None
+    tool_use_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -89,9 +94,17 @@ def read_active_dispatch_for_project(
     newest: ActiveDispatch | None = None
     newest_ts = ""
     for path in active_dir.glob("*.json"):
+        # Legacy fallback is SESSION-keyed only. agentId-keyed markers must not
+        # satisfy a write that carries no agent_id (that would let a write ride
+        # an unrelated active agent dispatch). agent_id-bearing writes resolve
+        # via read_active_dispatch_by_agent before this fallback is consulted.
+        if path.name.startswith("agent-"):
+            continue
         try:
             data = json.loads(path.read_text())
         except (OSError, json.JSONDecodeError):
+            continue
+        if data.get("agent_id"):
             continue
         try:
             active = ActiveDispatch(
@@ -120,6 +133,117 @@ def clear_active_dispatch(session_id: str, *, home: Path | None = None) -> bool:
     except OSError:
         return False
     return True
+
+
+def _coerce_active(data: dict) -> "ActiveDispatch | None":
+    """Build an ActiveDispatch from a dict, tolerating the optional agent fields."""
+    try:
+        return ActiveDispatch(
+            session_id=data["session_id"],
+            run_id=data["run_id"],
+            project_root=data["project_root"],
+            state_dir=data["state_dir"],
+            started_ts=data["started_ts"],
+            agent_id=data.get("agent_id"),
+            tool_use_id=data.get("tool_use_id"),
+        )
+    except (KeyError, TypeError):
+        return None
+
+
+def agent_active_dispatch_path(agent_id: str, *, home: Path | None = None) -> Path:
+    """Active-dispatch record keyed by the runtime agentId.
+
+    A per-dispatch file (``agent-<agentId>.json``) — NOT the single
+    per-session marker — so concurrent / fan-out dispatches in one session
+    never collide.
+    """
+    return user_active_dispatch_dir(home) / f"agent-{_safe_name(agent_id)}.json"
+
+
+def write_active_dispatch_by_agent(active: ActiveDispatch, *, home: Path | None = None) -> Path:
+    """Write an active dispatch keyed by ``active.agent_id``."""
+    if not active.agent_id:
+        raise ValueError("write_active_dispatch_by_agent requires active.agent_id")
+    target = agent_active_dispatch_path(active.agent_id, home=home)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(json.dumps(asdict(active), indent=2))
+    return target
+
+
+def read_active_dispatch_by_agent(agent_id: str, *, home: Path | None = None) -> "ActiveDispatch | None":
+    path = agent_active_dispatch_path(agent_id, home=home)
+    if not path.exists():
+        return None
+    try:
+        return _coerce_active(json.loads(path.read_text()))
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def clear_active_dispatch_by_agent(agent_id: str, *, home: Path | None = None) -> bool:
+    path = agent_active_dispatch_path(agent_id, home=home)
+    if not path.exists():
+        return False
+    try:
+        path.unlink()
+    except OSError:
+        return False
+    return True
+
+
+def has_active_agent_marker(run_id: str, *, home: Path | None = None) -> bool:
+    """True when an agentId-keyed active dispatch still references run_id.
+
+    Signals an in-flight background dispatch: post_task deferred it and
+    SubagentStop will finalize it, possibly AFTER the parent turn's Stop hook.
+    The Stop-path reconcile uses this to avoid prematurely sweeping a background
+    dispatch that outlives the parent turn.
+    """
+    active_dir = user_active_dispatch_dir(home)
+    if not active_dir.exists():
+        return False
+    for path in active_dir.glob("agent-*.json"):
+        try:
+            data = json.loads(path.read_text())
+        except (OSError, json.JSONDecodeError):
+            continue
+        if data.get("run_id") == run_id:
+            return True
+    return False
+
+
+def clear_active_dispatch_for_run(
+    run_id: str, *, session_id: str | None = None, home: Path | None = None
+) -> int:
+    """Clear every active-dispatch marker that points at ``run_id``.
+
+    Covers both indexes — the session-keyed marker (looked up directly when a
+    session is known) and any agentId-keyed marker (scanned, since those are
+    keyed by agentId not run_id). Guarded by run_id, so a shared session marker
+    belonging to a *different* live dispatch is never removed. Returns the count
+    cleared. Used by finalization (post_task / subagent_stop) and reconcile so a
+    completed Run never leaves an authorizing marker behind.
+    """
+    cleared = 0
+    if session_id:
+        s = read_active_dispatch(session_id, home=home)
+        if s is not None and s.run_id == run_id and clear_active_dispatch(session_id, home=home):
+            cleared += 1
+    active_dir = user_active_dispatch_dir(home)
+    if active_dir.exists():
+        for path in active_dir.glob("agent-*.json"):
+            try:
+                data = json.loads(path.read_text())
+            except (OSError, json.JSONDecodeError):
+                continue
+            if data.get("run_id") == run_id:
+                try:
+                    path.unlink()
+                    cleared += 1
+                except OSError:
+                    pass
+    return cleared
 
 
 def nearest_project_root(cwd: Path) -> Path | None:

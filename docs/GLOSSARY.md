@@ -95,7 +95,7 @@ A Manifest replaces what other systems do as free-form prose context-injection. 
 
 ### Deliverable
 **Shape:** Markdown file. Full English prose. No compression.
-**Location:** `reports/<category>/<name>-<date>.md` per category convention.
+**Location:** `<report_root>/<category>/<name>-<date>.md` per category convention. The `report_root` is read from the project's `install-decisions.yaml`: `.metaensemble/reports` for greenfield projects (machine-local, ignored), or an existing convention such as `.claude/reports` when inspection detected one.
 **Analog:** Pull request description, ML experiment report, design doc.
 
 The human-readable output of a Run. Targeted at the Principal and at institutional memory. Linked from the Run row in the Ledger; surfaced through the Registry.
@@ -131,7 +131,7 @@ The Registry is computed, not stored separately. The Ledger and the `executors` 
 **Location:** `metaensemble/hooks/`
 **Analog:** Kubernetes admission controller, CI lifecycle script, git hook.
 
-Code that fires on an agent runtime lifecycle event (SessionStart, PreToolUse, PostToolUse, Stop). Hooks enforce schemas, log Runs, check budgets, render summaries. They do not call models. They do not block on network I/O.
+Code that fires on an agent runtime lifecycle event (SessionStart, PreToolUse, PostToolUse, SubagentStop, Stop). Hooks enforce schemas, log Runs, check budgets, finalize background-dispatched Runs, render summaries. They do not call models. They do not block on network I/O.
 
 ### Window
 **Shape:** A 5-hour rolling token allocation imposed by the agent runtime's subscription tier.

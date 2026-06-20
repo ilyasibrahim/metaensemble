@@ -297,6 +297,7 @@ Then add MetaEnsemble's hooks to `~/.claude/settings.json` under the `hooks` key
       {"matcher": "NotebookEdit", "hooks": [{"type": "command", "command": "/path/to/venv/bin/python <site-packages>/metaensemble/hooks/file_event.py"}]},
       {"matcher": "Write", "hooks": [{"type": "command", "command": "/path/to/venv/bin/python <site-packages>/metaensemble/hooks/deliverable_sync.py"}]}
     ],
+    "SubagentStop": [{"matcher": "*", "hooks": [{"type": "command", "command": "/path/to/venv/bin/python <site-packages>/metaensemble/hooks/subagent_stop.py"}]}],
     "Stop": [{"matcher": "*", "hooks": [{"type": "command", "command": "/path/to/venv/bin/python <site-packages>/metaensemble/hooks/session_summary.py"}]}]
   }
 }

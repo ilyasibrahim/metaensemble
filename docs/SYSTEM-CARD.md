@@ -172,9 +172,11 @@ fixtures and baseline cells are present in the run.
 - **Platform**: Tested on macOS Darwin 25.4 and Linux (CI matrix:
   Python 3.10, 3.11, 3.12, 3.13). Windows is not currently exercised.
 - **Runtime**: Requires Claude Code with PreToolUse / PostToolUse /
-  SessionStart / Stop hook events. Older runtime versions that lack
-  the Stop event will lose Layer-1 reconciliation; the on-demand
-  `metaensemble reconcile` CLI is the workaround.
+  SessionStart / SubagentStop / Stop hook events. Older runtime versions
+  that lack the Stop event will lose Layer-1 reconciliation; the on-demand
+  `metaensemble reconcile` CLI is the workaround. Runtimes that lack the
+  SubagentStop event cannot finalize background-dispatched Runs at
+  subagent stop; those Runs are recovered by the reconcile sweep instead.
 - **Concurrency**: Single-runtime per project. A future protocol may
   add file-locking around the pending-sidecar directory; v0.1.0 does
   not.

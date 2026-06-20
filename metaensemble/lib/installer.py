@@ -422,6 +422,7 @@ class SurveyDecisions:
     timestamp: str = ""
     suggested_layout: str = Layout.NAMESPACED.value
     layout_rationale: str = ""
+    report_root: str = ".metaensemble/reports"
     overlaps: list[OverlapDecision] = field(default_factory=list)
 
 
@@ -1382,6 +1383,24 @@ def detect_overlaps(project_root: Path) -> list[OverlapDecision]:
     return overlaps
 
 
+def detect_report_root(project_root: Path) -> str:
+    """Return the report root MetaEnsemble should use for this project.
+
+    Existing projects can have a load-bearing convention such as
+    `.claude/reports/_registry.md`; keep that convention. Greenfield projects
+    with no detected work-record surface use MetaEnsemble's private ignored
+    area so reports do not pollute the committable tree.
+    """
+    registry_candidates = _work_record_documentation_candidates(project_root)
+    if registry_candidates:
+        registry = registry_candidates[0]
+        try:
+            return registry.parent.relative_to(project_root).as_posix()
+        except ValueError:
+            return str(registry.parent)
+    return ".metaensemble/reports"
+
+
 # --- Agent comparison + decisions ----------------------------------------
 
 
@@ -1596,6 +1615,7 @@ def build_default_decisions(
         timestamp=timestamp,
         suggested_layout=suggested,
         layout_rationale=rationale,
+        report_root=detect_report_root(project or Path.cwd()),
         overlaps=detect_overlaps(project or Path.cwd()),
     )
 
@@ -1614,6 +1634,7 @@ def _decisions_to_yaml_doc(decisions: SurveyDecisions) -> str:
         "# Reason: " + decisions.layout_rationale,
         "",
         f"suggested_layout: {decisions.suggested_layout}",
+        f"report_root: {json.dumps(decisions.report_root)}",
         "",
         "overlaps:",
     ]
@@ -1695,6 +1716,13 @@ def load_decisions(path: Path) -> SurveyDecisions:
                 write_policy=str(entry.get("write_policy") or "block_when_metaensemble_owned").strip(),
                 evidence=evidence,
             ))
+    report_root = str(data.get("report_root") or "").strip()
+    if not report_root:
+        # Older install-decisions.yaml files predate `report_root`. Infer the
+        # convention from the project so established `.claude/reports` projects
+        # do not get silently treated as greenfield on the next adopt.
+        report_root = detect_report_root(path.parent.parent)
+
     return SurveyDecisions(
         agents=agents,
         timestamp=str(data.get("timestamp", "")),
@@ -1702,6 +1730,7 @@ def load_decisions(path: Path) -> SurveyDecisions:
             str(data.get("suggested_layout") or data.get("suggested_mode") or Layout.NAMESPACED.value)
         ),
         layout_rationale="",
+        report_root=report_root,
         overlaps=overlaps,
     )
 
@@ -1930,6 +1959,24 @@ def _render_survey_v2(
                 f"`{overlap.recommendation}`."
             )
         lines.append("")
+
+    lines.append("## Report location")
+    lines.append("")
+    lines.append(
+        f"Default report root for new MetaEnsemble-authored reports: "
+        f"`{decisions.report_root}`."
+    )
+    lines.append(
+        "Use existing project report conventions only when the inspection detected "
+        "one in `.metaensemble/install-decisions.yaml`; otherwise keep report "
+        "artifacts under this ignored MetaEnsemble area."
+    )
+    lines.append(
+        "Do not write both Executor reports and a Coordinator synthesis by default; "
+        "write a Coordinator synthesis file only when the Manifest explicitly "
+        "declares it as a Deliverable."
+    )
+    lines.append("")
 
     # Next steps.
     lines.append("## What happens next")
@@ -3412,6 +3459,7 @@ def _metaensemble_hook_entries(home: Path | None = None) -> dict[str, list[dict[
     session_start_cmd = _hook_command("session_start.py", home=home)
     deliverable_sync_cmd = _hook_command("deliverable_sync.py", home=home)
     session_summary_cmd = _hook_command("session_summary.py", home=home)
+    subagent_stop_cmd = _hook_command("subagent_stop.py", home=home)
     return {
         "SessionStart": [{
             "matcher": "*",
@@ -3437,6 +3485,11 @@ def _metaensemble_hook_entries(home: Path | None = None) -> dict[str, list[dict[
         "Stop": [{
             "matcher": "*",
             "hooks": [{"type": "command", "command": session_summary_cmd}],
+        }],
+        # SubagentStop finalizes background-dispatched Runs by agentId.
+        "SubagentStop": [{
+            "matcher": "*",
+            "hooks": [{"type": "command", "command": subagent_stop_cmd}],
         }],
     }
 

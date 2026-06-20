@@ -19,6 +19,7 @@ ACTION_METAENSEMBLE_OWNED = "metaensemble_owned"
 ACTION_PROJECT_OWNED = "project_owned"
 ACTION_DUAL = "dual"
 WRITE_POLICY_BLOCK_WHEN_METAENSEMBLE_OWNED = "block_when_metaensemble_owned"
+DEFAULT_REPORT_ROOT = ".metaensemble/reports"
 
 
 @dataclass(frozen=True)
@@ -96,6 +97,38 @@ def load_overlap_surfaces(project_root: Path) -> tuple[OverlapSurface, ...]:
                 )
             )
     return tuple(surfaces)
+
+
+def report_root_for_project(project_root: Path) -> str:
+    """Read the project's configured report root from install decisions.
+
+    Older adopted projects predate the explicit `report_root` field. For those,
+    infer the established convention from a deliverable/work-record overlap such
+    as `.claude/reports/_registry.md`; otherwise use the greenfield default.
+    """
+    path = _decisions_path(project_root)
+    if not path.is_file():
+        return DEFAULT_REPORT_ROOT
+    try:
+        data = yaml.safe_load(path.read_text()) or {}
+    except (OSError, yaml.YAMLError):
+        return DEFAULT_REPORT_ROOT
+
+    report_root = str(data.get("report_root") or "").strip()
+    if report_root:
+        return report_root
+
+    overlaps = data.get("overlaps") or {}
+    if isinstance(overlaps, dict):
+        for entry in overlaps.values():
+            if not isinstance(entry, dict):
+                continue
+            for surface in _surface_paths(entry):
+                p = Path(surface)
+                if "reports" in p.parts and p.name:
+                    return p.parent.as_posix()
+
+    return DEFAULT_REPORT_ROOT
 
 
 def _resolve_surface_path(project_root: Path, surface: str) -> Path:

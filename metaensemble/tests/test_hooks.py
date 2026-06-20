@@ -16,11 +16,12 @@ import json
 import os
 import subprocess
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
 
-from metaensemble.lib.ledger import Ledger
+from metaensemble.lib.ledger import Executor, Ledger, Run
 from metaensemble.lib.runtime_state import _encode_cwd_for_runtime
 
 
@@ -96,12 +97,182 @@ def test_session_start_recovers_on_missing_db(tmp_path):
     assert payload["continue"] is True
 
 
+def test_session_start_survives_colliding_stale_sidecar(state_root):
+    """Regression: a stale pending sidecar whose run_id is already recorded
+    must not crash session_start. The reconciler's unguarded re-insert
+    previously raised 'UNIQUE constraint failed: runs.run_id', which the
+    blanket except surfaced to the Coordinator as '(state unavailable)'."""
+    from datetime import datetime, timedelta, timezone
+
+    from metaensemble.lib.ledger import Executor, Run
+    from metaensemble.lib.sidecar import PendingRun, write_pending
+
+    old_ts = (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()
+    run_id = "019ebd74-728c-7eb0-b91e-73efd88e76f0"
+
+    ledger = _open_ledger(state_root)
+    ledger._conn.execute(
+        "INSERT INTO roles (role_id, version, spec_path, model_tier, created_ts) "
+        "VALUES (?, ?, ?, ?, ?)",
+        ("backend", "1.0.0", "roles/backend.md", "sonnet", old_ts),
+    )
+    ledger._conn.execute(
+        "INSERT INTO tasks (task_id, task_type, status, created_ts) VALUES (?, ?, ?, ?)",
+        ("task-collide", "test", "done", old_ts),
+    )
+    ledger._conn.commit()
+    ledger.upsert_executor(
+        Executor(
+            executor_id="exec-collide",
+            alias="be-collide",
+            role_id="backend",
+            parent_executor_id=None,
+            created_ts=old_ts,
+            last_seen_ts=old_ts,
+            status="active",
+        )
+    )
+    ledger.append_run(
+        Run(
+            run_id=run_id,
+            executor_id="exec-collide",
+            task_id="task-collide",
+            model="sonnet",
+            tokens_in=100,
+            tokens_out=50,
+            window_id="2026-05-19T07",
+            started_ts=old_ts,
+            ended_ts=old_ts,
+            outcome="ok",
+        )
+    )
+    ledger.close()
+
+    # A stale sidecar carrying the SAME run_id (restored/duplicate).
+    write_pending(
+        state_root,
+        PendingRun(
+            run_id=run_id,
+            session_id="sess-X",
+            executor_id="exec-collide",
+            task_id="task-collide",
+            role_id="backend",
+            model_tier="sonnet",
+            started_ts=old_ts,
+            window_id="2026-05-19T07",
+            estimated_tokens_in=500,
+            extra={},
+        ),
+    )
+
+    code, out, _ = _invoke("session_start.py", {}, state_root)
+
+    assert code == 0
+    payload = json.loads(out)
+    assert payload["continue"] is True
+    assert "state unavailable" not in payload["systemMessage"]
+    assert "session start" in payload["systemMessage"]
+
+
 def test_session_summary_emits_digest(state_root):
     _open_ledger(state_root).close()
     code, out, _ = _invoke("session_summary.py", {}, state_root)
     assert code == 0
     payload = json.loads(out)
     assert "session summary" in payload["systemMessage"]
+
+
+def test_session_summary_includes_run_level_outputs(state_root):
+    ledger = _open_ledger(state_root)
+    now = datetime.now(timezone.utc).isoformat()
+    ledger.ensure_role(
+        role_id="devops",
+        version="1.0.0",
+        spec_path="roles/devops.md",
+        model_tier="sonnet",
+        created_ts=now,
+    )
+    ledger.upsert_executor(
+        Executor(
+            executor_id="exec-1",
+            alias="do-123",
+            role_id="devops",
+            parent_executor_id=None,
+            created_ts=now,
+            last_seen_ts=now,
+            status="active",
+        )
+    )
+    ledger.ensure_task(
+        task_id="task-1",
+        task_type="config",
+        status="done",
+        created_ts=now,
+    )
+    ledger.append_run(
+        Run(
+            run_id="run-output-001",
+            executor_id="exec-1",
+            task_id="task-1",
+            model="sonnet",
+            tokens_in=100,
+            tokens_out=25,
+            window_id="2026-06-20T15",
+            started_ts=now,
+            ended_ts=now,
+            outcome="ok",
+            deliverable_ref_json=json.dumps(
+                {"kind": "hash", "value": "sha256:" + "a" * 64}
+            ),
+            files_touched_json=json.dumps([
+                "CODE_OF_CONDUCT.md",
+                ".github/CODEOWNERS",
+            ]),
+        )
+    )
+    ledger.close()
+
+    code, out, _ = _invoke("session_summary.py", {}, state_root)
+
+    assert code == 0
+    payload = json.loads(out)
+    message = payload["systemMessage"]
+    assert "Outputs recorded: none" not in message
+    assert "Outputs recorded (1):" in message
+    assert "do-123/devops (run run-output-00): 2 file(s) touched" in message
+
+
+def test_session_summary_excludes_text_only_run_output(state_root):
+    """A successful run whose only output is a free-text summary (no files) —
+    e.g. a blocked-write failure narrative — must NOT be listed as a deliverable."""
+    ledger = _open_ledger(state_root)
+    now = datetime.now(timezone.utc).isoformat()
+    ledger.ensure_role(
+        role_id="general-purpose", version="1.0.0", spec_path="roles/gp.md",
+        model_tier="sonnet", created_ts=now,
+    )
+    ledger.upsert_executor(Executor(
+        executor_id="exec-2", alias="gene-59e", role_id="general-purpose",
+        parent_executor_id=None, created_ts=now, last_seen_ts=now, status="active",
+    ))
+    ledger.ensure_task(task_id="task-2", task_type="probe", status="done", created_ts=now)
+    ledger.append_run(Run(
+        run_id="run-textonly-001", executor_id="exec-2", task_id="task-2", model="sonnet",
+        tokens_in=50, tokens_out=10, window_id="2026-06-20T15",
+        started_ts=now, ended_ts=now, outcome="ok",
+        deliverable_ref_json=json.dumps({
+            "kind": "summary",
+            "value": "The Write was blocked by a PreToolUse hook (file_event.py policy hook)",
+        }),
+        files_touched_json=None,
+    ))
+    ledger.close()
+
+    code, out, _ = _invoke("session_summary.py", {}, state_root)
+    assert code == 0
+    message = json.loads(out)["systemMessage"]
+    assert "Outputs recorded: none" in message
+    assert "Write was blocked" not in message
 
 
 # --- Pre-task: cost gate + identity derivation ---------------------------
@@ -862,6 +1033,7 @@ def test_file_event_records_files_touched_for_post_task(state_root):
     state_root = project_root / ".metaensemble" / "state"
     _open_ledger(state_root).close()
     (project_root / "src").mkdir(parents=True)
+    (project_root / "src" / "app.css").write_text("body{}")  # real artifact on disk
 
     pre_code, _, _ = _invoke(
         "pre_task.py",
@@ -1012,6 +1184,87 @@ def test_file_event_allows_manifest_write_before_dispatch_run(state_root):
             "cwd": str(project_root),
             "transcript_path": str(transcript),
             "tool_input": {"file_path": ".metaensemble/manifests/hm-test.yaml"},
+        },
+        state_root,
+        cwd=project_root,
+    )
+
+    assert code == 0
+    assert json.loads(out)["continue"] is True
+
+
+def test_file_event_allows_metaensemble_report_write_before_dispatch_run(state_root):
+    """The Coordinator may write an explicitly-declared synthesis report."""
+    project_root = state_root.parent / "project"
+    state_root = project_root / ".metaensemble" / "state"
+    _open_ledger(state_root).close()
+    transcript = state_root.parent / "dispatch-transcript.jsonl"
+    transcript.write_text(json.dumps({
+        "type": "user",
+        "message": {
+            "role": "user",
+            "content": (
+                "<command-message>dispatch</command-message>\n"
+                "<command-name>/dispatch</command-name>\n"
+                "<command-args>write declared synthesis</command-args>"
+            ),
+        },
+    }) + "\n")
+
+    code, out, _ = _invoke(
+        "file_event.py",
+        {
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Write",
+            "session_id": "report-write",
+            "cwd": str(project_root),
+            "transcript_path": str(transcript),
+            "tool_input": {"file_path": ".metaensemble/reports/audit/synthesis.md"},
+        },
+        state_root,
+        cwd=project_root,
+    )
+
+    assert code == 0
+    assert json.loads(out)["continue"] is True
+
+
+def test_file_event_allows_legacy_configured_claude_report_root(state_root):
+    """Existing projects may preserve `.claude/reports` as their report root."""
+    project_root = state_root.parent / "project"
+    state_root = project_root / ".metaensemble" / "state"
+    _open_ledger(state_root).close()
+    decisions = project_root / ".metaensemble" / "install-decisions.yaml"
+    decisions.write_text(
+        "suggested_layout: top-level\n"
+        "overlaps:\n"
+        "  deliverable_records:\n"
+        "    project_surface: \".claude/reports/_registry.md\"\n"
+        "    action: project_owned\n"
+        "agents: []\n"
+    )
+    transcript = state_root.parent / "dispatch-transcript.jsonl"
+    transcript.write_text(json.dumps({
+        "type": "user",
+        "message": {
+            "role": "user",
+            "content": (
+                "<command-message>dispatch</command-message>\n"
+                "<command-name>/dispatch</command-name>\n"
+                "<command-args>write declared synthesis</command-args>"
+            ),
+        },
+    }) + "\n")
+
+    code, out, _ = _invoke(
+        "file_event.py",
+        {
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Write",
+            "session_id": "legacy-report-write",
+            "cwd": str(project_root),
+            "transcript_path": str(transcript),
+            "tool_input": {"file_path": ".claude/reports/audit/synthesis.md"},
         },
         state_root,
         cwd=project_root,
@@ -1355,7 +1608,20 @@ def test_post_task_no_pending_logs_and_continues(state_root):
 
 
 def test_post_task_captures_deliverable_path(state_root):
+    project_root = state_root.parent / "project"
+    state_root = project_root / ".metaensemble" / "state"
     _open_ledger(state_root).close()
+    # The claimed deliverable must exist on disk to be recorded (provenance is
+    # real artifacts only; a path parsed from prose that does not exist is dropped).
+    deliverable = (
+        project_root
+        / ".metaensemble"
+        / "reports"
+        / "implementation"
+        / "auth-20260514.md"
+    )
+    deliverable.parent.mkdir(parents=True)
+    deliverable.write_text("# report")
     _invoke(
         "pre_task.py",
         {
@@ -1368,6 +1634,7 @@ def test_post_task_captures_deliverable_path(state_root):
             },
         },
         state_root,
+        cwd=project_root,
     )
     _invoke(
         "post_task.py",
@@ -1375,14 +1642,21 @@ def test_post_task_captures_deliverable_path(state_root):
             "tool_name": "Task",
             "session_id": "sess-1",
             "tool_input": {"subagent_type": "backend"},
-            "tool_response": "Wrote the report to reports/implementation/auth-20260514.md and tests pass.",
+            "tool_response": (
+                "Wrote the report to "
+                ".metaensemble/reports/implementation/auth-20260514.md and tests pass."
+            ),
         },
         state_root,
+        cwd=project_root,
     )
     ledger = _open_ledger(state_root)
     runs = ledger.get_recent_runs(limit=10)
     assert len(runs) == 1
-    assert runs[0].deliverable_path == "reports/implementation/auth-20260514.md"
+    assert (
+        runs[0].deliverable_path
+        == ".metaensemble/reports/implementation/auth-20260514.md"
+    )
     ledger.close()
 
 
@@ -1391,6 +1665,24 @@ def test_post_task_captures_deliverable_path(state_root):
 def test_deliverable_sync_records_report_writes(state_root, tmp_path):
     state_root.mkdir(parents=True, exist_ok=True)
     deliverable = tmp_path / "reports" / "review" / "auth-20260513.md"
+    code, _, _ = _invoke(
+        "deliverable_sync.py",
+        {
+            "tool_name": "Write",
+            "tool_input": {"file_path": str(deliverable)},
+        },
+        state_root,
+    )
+    assert code == 0
+    index = state_root / "deliverables_index.jsonl"
+    assert index.exists()
+    record = json.loads(index.read_text().strip())
+    assert record["path"] == str(deliverable)
+
+
+def test_deliverable_sync_records_metaensemble_report_writes(state_root, tmp_path):
+    state_root.mkdir(parents=True, exist_ok=True)
+    deliverable = tmp_path / ".metaensemble" / "reports" / "audit" / "synthesis.md"
     code, _, _ = _invoke(
         "deliverable_sync.py",
         {
@@ -1419,3 +1711,30 @@ def test_deliverable_sync_skips_non_report_writes(state_root):
     assert code == 0
     index = state_root / "deliverables_index.jsonl"
     assert not index.exists()
+
+
+def test_session_summary_excludes_nonexistent_file_output(state_root):
+    """A run claiming a file that does not exist on disk (e.g. a denied write
+    the transcript listed) must NOT be counted as a produced deliverable."""
+    ledger = _open_ledger(state_root)
+    now = datetime.now(timezone.utc).isoformat()
+    ledger.ensure_role(role_id="code-quality", version="1.0.0",
+                       spec_path="roles/cq.md", model_tier="sonnet", created_ts=now)
+    ledger.upsert_executor(Executor(
+        executor_id="exec-3", alias="code-9", role_id="code-quality",
+        parent_executor_id=None, created_ts=now, last_seen_ts=now, status="active"))
+    ledger.ensure_task(task_id="task-3", task_type="audit", status="done", created_ts=now)
+    ghost = "/nonexistent/dir/governance-verification.md"
+    ledger.append_run(Run(
+        run_id="run-ghost-001", executor_id="exec-3", task_id="task-3", model="sonnet",
+        tokens_in=80, tokens_out=20, window_id="2026-06-20T15",
+        started_ts=now, ended_ts=now, outcome="ok",
+        deliverable_ref_json=json.dumps({"kind": "path", "value": ghost}),
+        files_touched_json=json.dumps([ghost]),
+    ))
+    ledger.close()
+    code, out, _ = _invoke("session_summary.py", {}, state_root)
+    assert code == 0
+    message = json.loads(out)["systemMessage"]
+    assert "governance-verification.md" not in message
+    assert "Outputs recorded: none" in message

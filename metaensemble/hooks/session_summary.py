@@ -2,7 +2,7 @@
 """Stop hook — renders a session digest for the Principal.
 
 Per ARCHITECTURE.md §8: at session end, surfaces Executors active, Runs
-completed, Deliverables produced, window percentage consumed. Reads from
+completed, recorded outputs, window percentage consumed. Reads from
 the Ledger; performs no model calls.
 
 Stdin: agent runtime's session-stop payload (informational; we ignore it).
@@ -79,6 +79,115 @@ def _deliverables_index_recent(within: timedelta) -> list[str]:
     return deduped
 
 
+def _safe_json_loads(raw: str | None):
+    if not raw:
+        return None
+    try:
+        return json.loads(raw)
+    except Exception:  # nosec B112
+        return None
+
+
+def _short_path(path: str, *, max_len: int = 96) -> str:
+    if len(path) <= max_len:
+        return path
+    return "..." + path[-(max_len - 3):]
+
+
+def _dedupe_files(files: list) -> list[str]:
+    """Collapse rel/abs duplicates of the same file (e.g. ``x.md`` and
+    ``/proj/x.md``) so one write is not counted twice. Keeps the shorter
+    (relative) representative."""
+    paths: list[str] = []
+    for f in files:
+        s = str(f).strip()
+        if s and s not in paths:
+            paths.append(s)
+    # Drop a path when a shorter path is the same file (the absolute twin).
+    return [f for f in paths if not any(o != f and f.endswith("/" + o) for o in paths)]
+
+
+def _file_exists(path: str, project_root: "Path | None") -> bool:
+    """True when `path` exists. Absolute paths are checked directly; relative
+    paths are resolved against project_root. When project_root is unknown we do
+    NOT hide a relative path (avoid false-negatives), since the finalization
+    guard already drops phantom relatives from the record."""
+    p = Path(path)
+    if p.is_absolute():
+        return p.exists()
+    if project_root is not None:
+        return (project_root / path).exists()
+    return True
+
+
+def _run_output_entry(run, executor_label=None, project_root=None) -> str | None:
+    """Summarize a Ledger Run's file outputs for the Stop digest.
+
+    A recorded output is a file artifact that exists on disk: an explicit
+    deliverable path or files the Run actually wrote. Free-text results
+    (deliverable_ref kind "summary") and paths that no longer exist are not
+    counted. Only successful (ok/partial) runs are considered.
+    """
+    if getattr(run, "outcome", None) not in ("ok", "partial"):
+        return None
+    run_short = run.run_id[:13]
+    owner = (
+        f"{executor_label} (run {run_short})"
+        if executor_label else f"run {run_short}"
+    )
+    ref = _safe_json_loads(getattr(run, "deliverable_ref_json", None))
+    files = _safe_json_loads(getattr(run, "files_touched_json", None))
+    files = _dedupe_files(files) if isinstance(files, list) else []
+    files = [f for f in files if _file_exists(f, project_root)]
+
+    # An explicit deliverable file path (only if it exists).
+    if isinstance(ref, dict) and ref.get("kind") == "path":
+        value = str(ref.get("value") or "").strip()
+        if value and _file_exists(value, project_root):
+            return f"{owner}: {_short_path(value)}"
+
+    # Files the run actually wrote and that still exist.
+    if files:
+        preview = ", ".join(_short_path(str(p), max_len=44) for p in files[:3])
+        more = f", +{len(files) - 3} more" if len(files) > 3 else ""
+        return f"{owner}: {len(files)} file(s) touched ({preview}{more})"
+
+    return None
+
+
+def _executor_label(ledger: Ledger, executor_id: str, cache: dict[str, str | None]) -> str | None:
+    if executor_id in cache:
+        return cache[executor_id]
+    executor = ledger.get_executor(executor_id)
+    label = f"{executor.alias}/{executor.role_id}" if executor else None
+    cache[executor_id] = label
+    return label
+
+
+def _run_outputs_recent(ledger: Ledger, recent_runs, project_root=None) -> list[str]:
+    outputs: list[str] = []
+    executor_cache: dict[str, str | None] = {}
+    for run in recent_runs:
+        entry = _run_output_entry(
+            run,
+            executor_label=_executor_label(ledger, run.executor_id, executor_cache),
+            project_root=project_root,
+        )
+        if entry:
+            outputs.append(entry)
+    return outputs
+
+
+def _dedupe_preserve_order(items: list[str]) -> list[str]:
+    seen: set[str] = set()
+    deduped: list[str] = []
+    for item in items:
+        if item not in seen:
+            seen.add(item)
+            deduped.append(item)
+    return deduped
+
+
 def _format_five_hour_line(window_id: str, report: WindowReport, five_h_window) -> str:
     """5h line for the session-summary digest, branching on `report.kind`.
 
@@ -139,7 +248,7 @@ def _format_digest(
     native,                       # NativeRateLimits | None
     runs: int,
     distinct_executors: int,
-    deliverables: list[str],
+    outputs: list[str],
     session_main_tokens: int,     # window-scoped main agent tokens
     session_me_tokens: int,       # window-scoped MetaEnsemble Ledger tokens
     session_main_lifetime: int = 0,  # session-lifetime main agent tokens
@@ -183,20 +292,22 @@ def _format_digest(
     lines.append(f"- Executors active this session: {distinct_executors}")
     if report.note:
         lines.append(f"- Note: {report.note}")
-    if deliverables:
-        lines.append(f"- Deliverables produced ({len(deliverables)}):")
-        for d in deliverables[:10]:
+    if outputs:
+        lines.append(f"- Outputs recorded ({len(outputs)}):")
+        for d in outputs[:10]:
             lines.append(f"  - {d}")
-        if len(deliverables) > 10:
-            lines.append(f"  - ...and {len(deliverables) - 10} more")
+        if len(outputs) > 10:
+            lines.append(f"  - ...and {len(outputs) - 10} more")
     else:
-        lines.append("- Deliverables produced: none")
+        lines.append("- Outputs recorded: none")
     return "\n".join(lines)
 
 
 def run() -> int:
     payload = read_input()
     session_id = (payload or {}).get("session_id") or ""
+    _cwd = (payload or {}).get("cwd")
+    project_root = Path(_cwd) if _cwd else None
 
     try:
         ledger = Ledger(db_path=db_path(), jsonl_path=jsonl_path())
@@ -226,7 +337,10 @@ def run() -> int:
         since = datetime.now(timezone.utc) - timedelta(hours=SESSION_LOOKBACK_HOURS)
         recent = ledger.get_recent_runs(limit=500, since=since)
         distinct_executors = len({r.executor_id for r in recent})
-        deliverables = _deliverables_index_recent(timedelta(hours=SESSION_LOOKBACK_HOURS))
+        outputs = _dedupe_preserve_order(
+            _deliverables_index_recent(timedelta(hours=SESSION_LOOKBACK_HOURS))
+            + _run_outputs_recent(ledger, recent, project_root)
+        )
 
         # Window-scoped session burn so the per-session line is
         # apples-to-apples with the 5h plan window above.
@@ -260,7 +374,7 @@ def run() -> int:
             native=native,
             runs=len(recent),
             distinct_executors=distinct_executors,
-            deliverables=deliverables,
+            outputs=outputs,
             session_main_tokens=session_main_window,
             session_me_tokens=session_me_window,
             session_main_lifetime=session_main_lifetime,

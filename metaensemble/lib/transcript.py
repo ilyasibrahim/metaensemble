@@ -324,6 +324,20 @@ def walk_transcript(
         dispatch_time_tolerance_seconds=dispatch_time_tolerance_seconds,
     )
 
+    # Map tool_use_id -> is_error for every tool_result in the transcript. A
+    # file write becomes provenance only when its matching result exists and did
+    # NOT error: a denied/failed Write (is_error=true) or a write with no result
+    # must never be recorded as a touched file (it would become a phantom
+    # deliverable). Built over all records so a result just outside the harvest
+    # window still resolves its write.
+    tool_results: dict[str, bool] = {}
+    for record in records:
+        for block in _content_blocks(record):
+            if isinstance(block, dict) and block.get("type") == "tool_result":
+                tuid = block.get("tool_use_id")
+                if isinstance(tuid, str) and tuid:
+                    tool_results[tuid] = bool(block.get("is_error"))
+
     for idx, record in enumerate(records):
         raw_count += 1
         in_window = _record_in_window(record, after_ts=after_ts, before_ts=before_ts)
@@ -364,7 +378,14 @@ def walk_transcript(
                 if isinstance(tool_input, dict):
                     if tool_name in _FILE_WRITE_TOOLS:
                         fp = _extract_file_path(tool_input)
-                        if fp:
+                        tuid = block.get("id")
+                        # Count only writes whose tool_result confirms success.
+                        if (
+                            fp
+                            and isinstance(tuid, str)
+                            and tuid in tool_results
+                            and not tool_results[tuid]
+                        ):
                             files.add(fp)
                     # Rough input-token estimate for the tool call body —
                     # length of the serialized input divided by the

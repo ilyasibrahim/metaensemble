@@ -210,11 +210,11 @@ When you close the session, the Coordinator emits a summary:
 - This session: 6,210 tokens (main agent: 4,180, MetaEnsemble: 2,030)
 - Runs completed this session: 4
 - Executors active this session: 3
-- Deliverables produced (4):
-  - reports/implementation/auth-reset-20260513.md
-  - reports/review/auth-security-20260513.md
-  - reports/tests/auth-tests-20260513.md
-  - reports/implementation/auth-synthesis-20260513.md
+- Outputs recorded (4):
+  - .metaensemble/reports/implementation/auth-reset-20260513.md
+  - .metaensemble/reports/review/auth-security-20260513.md
+  - .metaensemble/reports/tests/auth-tests-20260513.md
+  - .metaensemble/reports/implementation/auth-synthesis-20260513.md
 ```
 
 That is the full loop. State intent, approve when asked, read Deliverables, close.

@@ -169,6 +169,14 @@ def test_extract_deliverable_path_preserves_quoted_paths_with_spaces():
     assert extract_deliverable_path(response) == path
 
 
+def test_extract_deliverable_path_finds_metaensemble_reports_md():
+    response = "Wrote `.metaensemble/reports/audit/synthesis-20260620.md`."
+    assert (
+        extract_deliverable_path(response)
+        == ".metaensemble/reports/audit/synthesis-20260620.md"
+    )
+
+
 # --- ensure_role / ensure_executor / ensure_task -------------------------
 
 def test_ensure_role_is_idempotent(tmp_ledger: Ledger):

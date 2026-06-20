@@ -116,6 +116,53 @@ def test_session_reconcile_ignores_other_sessions(
     assert len(tmp_ledger.get_recent_runs(limit=10)) == 0
 
 
+def test_stale_reconcile_skips_already_recorded_run(
+    tmp_ledger, sample_executor, seeded_task, state_root
+):
+    """Regression: a stale sidecar whose run_id is already recorded must be
+    dropped, not re-inserted. The unguarded re-insert previously raised
+    'UNIQUE constraint failed: runs.run_id' and crashed session_start
+    ('(state unavailable)')."""
+    from metaensemble.lib.ledger import Run
+
+    old_ts = (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()
+    pending = _make_pending(
+        executor_id=sample_executor.executor_id,
+        task_id=seeded_task,
+        started_ts=old_ts,
+    )
+    # Pre-record a Run with the SAME run_id (simulates a background
+    # SubagentStop finalize, a prior reconcile, or a restored sidecar).
+    tmp_ledger.append_run(
+        Run(
+            run_id=pending.run_id,
+            executor_id=sample_executor.executor_id,
+            task_id=seeded_task,
+            model="sonnet",
+            tokens_in=100,
+            tokens_out=50,
+            window_id="2026-05-19T07",
+            started_ts=old_ts,
+            ended_ts=old_ts,
+            outcome="ok",
+        )
+    )
+    write_pending(state_root, pending)
+
+    # Must not raise (previously: UNIQUE constraint failed: runs.run_id).
+    reconciled = reconcile_stale_pending(
+        tmp_ledger, state_root, max_age=timedelta(hours=1)
+    )
+
+    assert reconciled == []  # colliding sidecar dropped, not re-reconciled
+    assert not any(pending_dir(state_root).glob("*"))  # sidecar cleaned
+    rows = [
+        r for r in tmp_ledger.get_recent_runs(limit=10) if r.run_id == pending.run_id
+    ]
+    assert len(rows) == 1  # the original row, untouched
+    assert rows[0].outcome == "ok"
+
+
 def test_stale_reconcile_picks_old_sidecars(
     tmp_ledger, sample_executor, seeded_task, state_root
 ):
@@ -357,10 +404,12 @@ def test_reconcile_empty_state_returns_empty(tmp_ledger, state_root):
 def test_reconcile_handles_missing_executor(tmp_ledger, seeded_task, state_root):
     """Sidecar references an Executor that is not in the Ledger.
 
-    The reconciler must still record the Run (the FK on `executor_id`
-    means the Run write will fail unless the Executor exists). Today the
-    behavior is that the Executor must exist; this test pins that
-    contract so a future regression is caught.
+    Previously the reconciler let the FK violation on `executor_id`
+    propagate, which crashed session_start ('(state unavailable)'). The
+    per-sidecar guard must now contain it: the pass completes without
+    raising and a single malformed sidecar cannot take down the whole
+    reconcile. The failure is recorded via the 'reconcile-sidecar-failed'
+    log rather than thrown.
     """
     pending = _make_pending(
         executor_id="ghost-executor",
@@ -369,6 +418,133 @@ def test_reconcile_handles_missing_executor(tmp_ledger, seeded_task, state_root)
     )
     write_pending(state_root, pending)
 
-    # FK violation expected — current contract.
-    with pytest.raises(Exception):
-        reconcile_stale_pending(tmp_ledger, state_root, max_age=timedelta(hours=1))
+    # Must NOT raise — the guard contains the FK violation.
+    reconciled = reconcile_stale_pending(
+        tmp_ledger, state_root, max_age=timedelta(hours=1)
+    )
+
+    # No Run was recorded for the ghost sidecar (the FK prevented the row).
+    assert all(r.run_id != pending.run_id for r in reconciled)
+    assert all(
+        r.executor_id != "ghost-executor"
+        for r in tmp_ledger.get_recent_runs(limit=10)
+    )
+
+
+def test_stale_reconcile_clears_residue_and_matching_marker(
+    tmp_ledger, sample_executor, seeded_task, state_root, tmp_path, monkeypatch
+):
+    """When reconcile skips an already-recorded run, it must also clear that
+    run's file-event residue and its active-dispatch marker -- the marker only
+    when it still points at THIS run_id (collision-safe)."""
+    from metaensemble.lib.ledger import Run
+    from metaensemble.lib.file_events import (
+        ActiveDispatch,
+        FileToolEvent,
+        active_dispatch_path,
+        append_file_event,
+        file_events_dir,
+        write_active_dispatch,
+    )
+
+    monkeypatch.setenv("HOME", str(tmp_path))  # isolate the global marker dir
+    old_ts = (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()
+    pending = _make_pending(
+        executor_id=sample_executor.executor_id, task_id=seeded_task, started_ts=old_ts
+    )
+    tmp_ledger.append_run(
+        Run(
+            run_id=pending.run_id, executor_id=sample_executor.executor_id,
+            task_id=seeded_task, model="sonnet", tokens_in=1, tokens_out=1,
+            window_id="2026-05-19T07", started_ts=old_ts, ended_ts=old_ts, outcome="ok",
+        )
+    )
+    write_pending(state_root, pending)
+    append_file_event(
+        state_root,
+        FileToolEvent(
+            ts=old_ts, session_id=pending.session_id, run_id=pending.run_id,
+            tool_name="Write", path="/x", rel_path="x", cwd="/",
+        ),
+    )
+    write_active_dispatch(
+        ActiveDispatch(
+            session_id=pending.session_id, run_id=pending.run_id,
+            project_root=str(state_root.parent), state_dir=str(state_root),
+            started_ts=old_ts,
+        )
+    )
+    assert (file_events_dir(state_root) / f"{pending.run_id}.jsonl").exists()
+    assert active_dispatch_path(pending.session_id).exists()
+
+    reconcile_stale_pending(tmp_ledger, state_root, max_age=timedelta(hours=1))
+
+    assert not (file_events_dir(state_root) / f"{pending.run_id}.jsonl").exists()
+    assert not active_dispatch_path(pending.session_id).exists()
+    assert not any(pending_dir(state_root).glob("*"))
+
+
+def test_stale_reconcile_preserves_marker_for_different_run(
+    tmp_ledger, sample_executor, seeded_task, state_root, tmp_path, monkeypatch
+):
+    """Collision safety: if the shared session marker points at a DIFFERENT
+    run_id, reconcile must NOT clear it (it may belong to a live dispatch)."""
+    import json as _json
+    from metaensemble.lib.ledger import Run
+    from metaensemble.lib.file_events import (
+        ActiveDispatch,
+        active_dispatch_path,
+        write_active_dispatch,
+    )
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    old_ts = (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()
+    pending = _make_pending(
+        executor_id=sample_executor.executor_id, task_id=seeded_task, started_ts=old_ts
+    )
+    tmp_ledger.append_run(
+        Run(
+            run_id=pending.run_id, executor_id=sample_executor.executor_id,
+            task_id=seeded_task, model="sonnet", tokens_in=1, tokens_out=1,
+            window_id="2026-05-19T07", started_ts=old_ts, ended_ts=old_ts, outcome="ok",
+        )
+    )
+    write_pending(state_root, pending)
+    write_active_dispatch(
+        ActiveDispatch(
+            session_id=pending.session_id, run_id="some-other-live-run",
+            project_root=str(state_root.parent), state_dir=str(state_root),
+            started_ts=old_ts,
+        )
+    )
+
+    reconcile_stale_pending(tmp_ledger, state_root, max_age=timedelta(hours=1))
+
+    marker = active_dispatch_path(pending.session_id)
+    assert marker.exists()  # preserved
+    assert _json.load(open(marker))["run_id"] == "some-other-live-run"
+
+
+def test_session_reconcile_skips_inflight_background_dispatch(
+    tmp_ledger, sample_executor, seeded_task, state_root, tmp_path, monkeypatch
+):
+    """A live background dispatch must not be swept by Stop-path reconcile."""
+    from metaensemble.lib.file_events import (
+        ActiveDispatch,
+        write_active_dispatch_by_agent,
+    )
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    pending = _make_pending(
+        executor_id=sample_executor.executor_id, task_id=seeded_task
+    )
+    write_pending(state_root, pending)
+    write_active_dispatch_by_agent(ActiveDispatch(
+        pending.session_id, pending.run_id, str(state_root.parent),
+        str(state_root), pending.started_ts, agent_id="AG1", tool_use_id="T1"))
+
+    reconciled = reconcile_session_pending(tmp_ledger, state_root, pending.session_id)
+
+    assert reconciled == []                                       # not swept
+    assert (pending_dir(state_root) / "run-001.json").exists()    # sidecar intact
+    assert len(tmp_ledger.get_recent_runs(limit=10)) == 0         # no bogus run

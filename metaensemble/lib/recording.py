@@ -206,7 +206,7 @@ _RELATIVE_REPORTS_PATH_RE = re.compile(
 
 
 def extract_deliverable_path(tool_response: Any) -> str | None:
-    """Pull a `reports/.../*.md` path out of the Task response if present.
+    """Pull a reports/.../*.md path out of the Task response if present.
 
     Returns the first matching path, or None. The Coordinator typically
     names the Deliverable file it wrote; the hook records the path so
@@ -232,7 +232,7 @@ def build_deliverable_ref(
 ) -> dict[str, Any] | None:
     """Construct the structured `deliverable_ref` payload for a Run.
 
-    Not every dispatch produces a long Markdown report under `reports/`.
+    Not every dispatch produces a long Markdown report under a reports directory.
     The Run row records a structured reference
     so short answers, hash-only diffs, and traditional Markdown
     deliverables all have a place to live without forcing the

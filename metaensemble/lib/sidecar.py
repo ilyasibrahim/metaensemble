@@ -104,6 +104,31 @@ def latest_pending_for_session(state_dir: Path, session_id: str) -> PendingRun |
     return candidates[0][1]
 
 
+def pending_by_tool_use_id(state_dir: Path, tool_use_id: str) -> PendingRun | None:
+    """Return the PendingRun whose stamp carries this tool_use_id.
+
+    post_task(Agent) uses this to reconcile a background launch (which carries
+    the runtime agentId) back to the pre_task stamp, since agentId is unknown at
+    PreToolUse time. Keyed by tool_use_id rather than session, so concurrent /
+    fan-out dispatches in one session never cross-correlate.
+    """
+    if not tool_use_id:
+        return None
+    p = pending_dir(state_dir)
+    if not p.exists():
+        return None
+    for entry in p.glob(f"*{SIDECAR_SUFFIX}"):
+        try:
+            data = json.loads(entry.read_text())
+        except (OSError, json.JSONDecodeError):
+            continue
+        if (data.get("extra") or {}).get("tool_use_id") == tool_use_id:
+            pending = _coerce_pending(data)
+            if pending is not None:
+                return pending
+    return None
+
+
 def delete_pending(state_dir: Path, run_id: str) -> bool:
     """Delete a sidecar after the Run has been written to the Ledger.
 

@@ -479,6 +479,9 @@ def run() -> int:
             extra={
                 "transcript_path": payload.get("transcript_path"),
                 "tool_prompt_sha256": prompt_fingerprint(prompt),
+                # Links this stamp to the PostToolUse(Agent) payload that
+                # first exposes the runtime agentId correlation key.
+                "tool_use_id": payload.get("tool_use_id"),
             },
         )
         if decision.state != GateState.BLOCK:

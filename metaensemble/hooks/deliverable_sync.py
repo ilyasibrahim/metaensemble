@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """PostToolUse hook for Write invocations that produce Deliverables.
 
-Per ARCHITECTURE.md §8: when a Write call lands a markdown file under a
-`reports/` directory, this hook treats the file as a Deliverable and
-records the path so the Registry view can surface it. The hook is
+When a Write call lands a markdown file under a `reports/` directory
+(for greenfield MetaEnsemble projects, normally `.metaensemble/reports/`),
+this hook treats the file as a Deliverable and records the path so the
+Registry view can surface it. The hook is
 deliberately non-blocking; if the write turns out not to be a Deliverable
 or the recording fails, the hook logs and exits 0.
 
@@ -33,7 +34,7 @@ DELIVERABLE_INDEX_PATH = "deliverables_index.jsonl"
 
 
 def _is_deliverable(file_path: str) -> bool:
-    """A Write counts as a Deliverable if its path lies under `reports/` and is markdown."""
+    """A Write counts as a Deliverable if its path lies under reports/ and is markdown."""
     p = Path(file_path)
     if p.suffix.lower() != ".md":
         return False

@@ -115,6 +115,7 @@ def test_survey_writes_markdown_report(tmp_path):
     assert result.decisions_path.exists()
     decisions_text = result.decisions_path.read_text()
     assert "mybot" in decisions_text
+    assert 'report_root: ".metaensemble/reports"' in decisions_text
     assert "action:" in decisions_text
 
 
@@ -306,6 +307,26 @@ def test_detect_overlaps_uses_deliverable_records_category(tmp_path):
     assert overlaps[0].project_surface == ".claude/reports/_registry.md"
     assert overlaps[0].recommendation == "metaensemble_owned"
     assert overlaps[0].write_policy == "block_when_metaensemble_owned"
+
+
+def test_detect_report_root_defaults_greenfield_to_metaensemble_reports(tmp_path):
+    from metaensemble.lib.installer import detect_report_root
+
+    project = tmp_path / "project"
+    project.mkdir()
+
+    assert detect_report_root(project) == ".metaensemble/reports"
+
+
+def test_detect_report_root_preserves_existing_claude_reports_convention(tmp_path):
+    from metaensemble.lib.installer import detect_report_root
+
+    project = tmp_path / "project"
+    registry = project / ".claude" / "reports" / "_registry.md"
+    registry.parent.mkdir(parents=True)
+    registry.write_text("# Registry\n")
+
+    assert detect_report_root(project) == ".claude/reports"
 
 
 def test_user_setup_applies_only_user_scope_actions(tmp_path, monkeypatch):

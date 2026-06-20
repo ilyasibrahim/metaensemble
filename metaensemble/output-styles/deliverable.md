@@ -1,6 +1,6 @@
 ---
 name: deliverable
-description: Human-readable output for the Principal. Full English prose in Markdown. Institutional memory of what was decided, attempted, and learned. Used for Deliverables in `reports/`.
+description: Human-readable output for the Principal. Full English prose in Markdown. Institutional memory of what was decided, attempted, and learned. Used for Deliverables under the project's MetaEnsemble `report_root`.
 ---
 
 # Deliverable output style

@@ -125,7 +125,7 @@ def test_single_task_infrastructure_overhead_under_budget(populated):
     }
     write_payload = {
         "tool_name": "Write",
-        "tool_input": {"file_path": "reports/test/e2e-deliverable.md"},
+        "tool_input": {"file_path": ".metaensemble/reports/test/e2e-deliverable.md"},
     }
 
     elapsed_ms = 0.0
@@ -170,7 +170,7 @@ def test_session_level_overhead_under_extended_budget(populated):
     elapsed_ms += _invoke_hook("post_task.py", post_payload, state_root)
     elapsed_ms += _invoke_hook(
         "deliverable_sync.py",
-        {"tool_name": "Write", "tool_input": {"file_path": "reports/test/d.md"}},
+        {"tool_name": "Write", "tool_input": {"file_path": ".metaensemble/reports/test/d.md"}},
         state_root,
     )
     elapsed_ms += _invoke_hook("session_summary.py", {}, state_root)

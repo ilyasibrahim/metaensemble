@@ -7,6 +7,26 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [Unreleased]
+
+### Added
+
+**Background and fan-out dispatch lifecycle.** A `SubagentStop` hook (`subagent_stop.py`) finalizes background-dispatched Runs, correlated strictly by the runtime `agentId` so concurrent and fan-out dispatches in one session finalize independently. `post_task.py` now detects the Agent tool's launch stub, reconciles it to the pre-task sidecar by `tool_use_id`, records an `agentId`-keyed active-dispatch marker so the subagent's file writes stay authorized, and defers finalization to `SubagentStop`. Synchronous and background dispatches share one `finalize_pending` path, so both produce identical Run records.
+
+**Configurable report location.** `install-decisions.yaml` gains a `report_root` field. Greenfield projects default to the machine-local, ignored `.metaensemble/reports`; existing projects keep a detected convention such as `.claude/reports`. The Coordinator writes a synthesis report file only when the Manifest explicitly declares it, synthesizing in the Principal-facing response otherwise.
+
+### Fixed
+
+**Idempotent Run recording.** `append_run` now inserts under `ON CONFLICT(run_id) DO NOTHING` and mirrors to JSONL only on a real insert; reconcile skips any sidecar whose `run_id` is already recorded. A background Run finalized by `SubagentStop` and later swept by reconcile (or any double-finalize) records exactly one Run instead of crashing on the primary key — the failure that surfaced as `session_start` reporting `(state unavailable)`.
+
+**Provenance no longer records phantom outputs.** A file is recorded as touched only when its Write tool result exists and did not error, and only when the path exists on disk at finalization; denied writes and paths parsed from prose are excluded and logged. Active-dispatch markers for a finalized Run are cleared across both the session and `agentId` indexes, so a completed Run can never keep a write authorized.
+
+### Changed
+
+**Session digest.** The Stop digest now reports "Outputs recorded" (real on-disk artifacts, rel/abs duplicates collapsed) rather than "Deliverables produced".
+
+---
+
 ## [0.1.0] — 2026-05-25
 
 Initial public release. MetaEnsemble ships as a project-agnostic local runtime for coordinating ensembles of cognitive agents with stable identities, typed contracts, and an append-only Ledger of every Run.

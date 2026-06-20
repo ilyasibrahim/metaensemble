@@ -51,6 +51,36 @@ def test_append_run_appends_to_jsonl(tmp_ledger, sample_executor, sample_task):
     assert run.run_id in lines[0]
 
 
+def test_append_run_is_idempotent_by_run_id(tmp_ledger, sample_executor, sample_task):
+    """A second append of the same run_id must not raise and must report no
+    insert (returns False), leaving exactly one row. Guards the
+    'UNIQUE constraint failed: runs.run_id' crash class."""
+    run = _make_run(sample_executor.executor_id, sample_task)
+    assert tmp_ledger.append_run(run) is True
+    assert tmp_ledger.append_run(run) is False
+    rows = [r for r in tmp_ledger.get_recent_runs(limit=10) if r.run_id == run.run_id]
+    assert len(rows) == 1
+
+
+def test_append_run_duplicate_does_not_duplicate_jsonl(
+    tmp_ledger, sample_executor, sample_task
+):
+    """The JSONL mirror is appended only on a real insert, so a duplicate
+    append must not add a second mirror line."""
+    run = _make_run(sample_executor.executor_id, sample_task)
+    tmp_ledger.append_run(run)
+    tmp_ledger.append_run(run)
+    lines = tmp_ledger.jsonl_path.read_text().strip().splitlines()
+    assert sum(1 for ln in lines if run.run_id in ln) == 1
+
+
+def test_run_exists_reflects_persistence(tmp_ledger, sample_executor, sample_task):
+    run = _make_run(sample_executor.executor_id, sample_task)
+    assert tmp_ledger.run_exists(run.run_id) is False
+    tmp_ledger.append_run(run)
+    assert tmp_ledger.run_exists(run.run_id) is True
+
+
 def test_get_recent_runs_orders_descending(tmp_ledger, sample_executor, sample_task):
     base = datetime.now()
     for i in range(5):

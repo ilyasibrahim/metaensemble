@@ -44,8 +44,9 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from metaensemble.lib.file_events import (
-    clear_active_dispatch,
+    clear_active_dispatch_for_run,
     clear_file_events,
+    has_active_agent_marker,
     read_file_events,
 )
 from metaensemble.lib.ledger import Executor, Ledger, Run
@@ -190,7 +191,7 @@ def _record_failed_run(
     )
     ledger.append_run(run)
     clear_file_events(state_dir, run_id=pending.run_id, events=events)
-    clear_active_dispatch(pending.session_id)
+    clear_active_dispatch_for_run(pending.run_id, session_id=pending.session_id)
     existing = ledger.get_executor(pending.executor_id)
     if existing:
         ledger.upsert_executor(
@@ -281,6 +282,12 @@ def reconcile_session_pending(
     for entry, pending in _iter_pending(state_dir):
         if pending.session_id != session_id:
             continue
+        # An in-flight BACKGROUND dispatch outlives the parent turn: post_task
+        # deferred it (live agent marker) and SubagentStop will finalize it,
+        # often AFTER this Stop hook. Never sweep it here, or we record a bogus
+        # "session ended" Run and clear the marker out from under the subagent.
+        if has_active_agent_marker(pending.run_id):
+            continue
         reason, outcome = _classify_reconcile_cause(
             state_dir, pending, REASON_SESSION_END
         )
@@ -319,25 +326,61 @@ def reconcile_stale_pending(
     cutoff = now - max_age
     reconciled: list[ReconciledRun] = []
     for entry, pending in _iter_pending(state_dir):
-        sidecar_ts: datetime
         try:
-            sidecar_ts = datetime.fromisoformat(pending.started_ts)
-            if sidecar_ts.tzinfo is None:
-                sidecar_ts = sidecar_ts.replace(tzinfo=timezone.utc)
-        except (TypeError, ValueError):
-            sidecar_ts = datetime.fromtimestamp(entry.stat().st_mtime, tz=timezone.utc)
-        if sidecar_ts > cutoff:
-            continue
-        reason, outcome = _classify_reconcile_cause(state_dir, pending, REASON_STALE)
-        _record_failed_run(ledger, state_dir, pending, reason, outcome=outcome)
-        delete_pending(state_dir, pending.run_id)
-        reconciled.append(
-            ReconciledRun(
-                run_id=pending.run_id,
-                session_id=pending.session_id,
-                executor_id=pending.executor_id,
-                task_id=pending.task_id,
-                reason=reason,
+            sidecar_ts: datetime
+            try:
+                sidecar_ts = datetime.fromisoformat(pending.started_ts)
+                if sidecar_ts.tzinfo is None:
+                    sidecar_ts = sidecar_ts.replace(tzinfo=timezone.utc)
+            except (TypeError, ValueError):
+                sidecar_ts = datetime.fromtimestamp(
+                    entry.stat().st_mtime, tz=timezone.utc
+                )
+            if sidecar_ts > cutoff:
+                continue
+            # Idempotency guard: if this run_id is already recorded (finalized by
+            # a background SubagentStop, a prior reconcile, or a duplicate/restored
+            # sidecar), the sidecar is stale. Drop it without re-inserting — a
+            # second append would hit the runs PRIMARY KEY. This unguarded insert
+            # is what kept session_start crashing with "(state unavailable)".
+            if ledger.run_exists(pending.run_id):
+                # Stale duplicate: the Run is already recorded. Clean up its
+                # residue without re-inserting. File-event residue is keyed by
+                # run_id, so it is always safe to clear. The active-dispatch
+                # marker is cleared ONLY when it still points at THIS run_id --
+                # clearing by session alone is unsafe while markers collide on
+                # "unknown-session" (it could delete a different live dispatch's
+                # marker).
+                clear_file_events(state_dir, run_id=pending.run_id)
+                clear_active_dispatch_for_run(
+                    pending.run_id, session_id=pending.session_id
+                )
+                delete_pending(state_dir, pending.run_id)
+                continue
+            reason, outcome = _classify_reconcile_cause(state_dir, pending, REASON_STALE)
+            _record_failed_run(ledger, state_dir, pending, reason, outcome=outcome)
+            delete_pending(state_dir, pending.run_id)
+            reconciled.append(
+                ReconciledRun(
+                    run_id=pending.run_id,
+                    session_id=pending.session_id,
+                    executor_id=pending.executor_id,
+                    task_id=pending.task_id,
+                    reason=reason,
+                )
             )
-        )
+        except Exception as exc:
+            # One malformed or uncooperative sidecar must never take down the
+            # whole reconcile pass (and with it session_start). Log and skip.
+            try:
+                from metaensemble.hooks._common import log_error
+
+                log_error(
+                    "reconcile-sidecar-failed",
+                    str(exc),
+                    {"run_id": getattr(pending, "run_id", None)},
+                )
+            except Exception:
+                pass
+            continue
     return reconciled

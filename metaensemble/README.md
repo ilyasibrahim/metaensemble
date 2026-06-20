@@ -107,8 +107,9 @@ metaensemble/
 │   ├── _common.py            # shared utilities (state paths, stdin/stdout JSON contract)
 │   ├── session_start.py      # SessionStart hook — Registry summary, window status
 │   ├── pre_task.py           # PreToolUse (Task) — Manifest validation + cost gate
-│   ├── post_task.py          # PostToolUse (Task) — Ledger append + verification
+│   ├── post_task.py          # PostToolUse (Task) — Ledger append (sync) / defer to SubagentStop (background)
 │   ├── deliverable_sync.py   # PostToolUse (Write) — Deliverable index update
+│   ├── subagent_stop.py      # SubagentStop hook — finalize background-dispatched Runs by agentId
 │   └── session_summary.py    # Stop hook — session digest
 ├── skills/
 │   └── metaensemble-protocol/SKILL.md   # the Coordinator's operational protocol

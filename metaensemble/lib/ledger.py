@@ -408,8 +408,21 @@ class Ledger:
 
     # --- Writes ---------------------------------------------------------
 
-    def append_run(self, run: Run) -> None:
-        """Append a Run to SQLite and JSONL.
+    def run_exists(self, run_id: str) -> bool:
+        """True when a Run with this run_id is already recorded in SQLite."""
+        cur = self._conn.execute(
+            "SELECT 1 FROM runs WHERE run_id = ? LIMIT 1", (run_id,)
+        )
+        return cur.fetchone() is not None
+
+    def append_run(self, run: Run) -> bool:
+        """Append a Run to SQLite and JSONL, idempotently by run_id.
+
+        Returns True when a new row was inserted, False when a row with this
+        run_id already existed (insert skipped via ON CONFLICT). The JSONL
+        mirror is appended *only on a real insert*, so re-finalizing or
+        re-reconciling the same run_id can never raise on the PRIMARY KEY and
+        never duplicates the JSONL mirror line.
 
         SQLite write is transactional. JSONL append happens after SQLite
         commits, so an orphaned JSONL line (without a SQLite row) is the
@@ -417,7 +430,7 @@ class Ledger:
         """
         _validate_run_for_persistence(run)
         with self.transaction() as conn:
-            conn.execute(
+            cur = conn.execute(
                 """
                 INSERT INTO runs (
                     run_id, executor_id, task_id, model,
@@ -434,6 +447,7 @@ class Ledger:
                     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
                 )
+                ON CONFLICT(run_id) DO NOTHING
                 """,
                 (
                     run.run_id, run.executor_id, run.task_id, run.model,
@@ -450,8 +464,11 @@ class Ledger:
                     run.orchestration_tokens,
                 ),
             )
-        with self.jsonl_path.open("a") as f:
-            f.write(json.dumps(asdict(run)) + "\n")
+            inserted = cur.rowcount == 1
+        if inserted:
+            with self.jsonl_path.open("a") as f:
+                f.write(json.dumps(asdict(run)) + "\n")
+        return inserted
 
     def upsert_executor(self, executor: Executor) -> None:
         """Insert or update an Executor by executor_id."""

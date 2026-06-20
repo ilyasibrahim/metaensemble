@@ -39,18 +39,28 @@ def test_walk_extracts_files_touched(tmp_path):
                 "role": "assistant",
                 "model": "claude-sonnet-4-6",
                 "content": [
-                    {"type": "tool_use", "name": "Write",
+                    {"type": "tool_use", "id": "tu-w", "name": "Write",
                      "input": {"file_path": "/src/foo.py", "content": "x"}},
-                    {"type": "tool_use", "name": "Edit",
+                    {"type": "tool_use", "id": "tu-e", "name": "Edit",
                      "input": {"file_path": "/src/bar.py",
                                "old_string": "a", "new_string": "b"}},
+                ],
+            },
+        },
+        {
+            "timestamp": "2026-05-19T10:00:01Z",
+            "message": {
+                "role": "user",
+                "content": [
+                    {"type": "tool_result", "tool_use_id": "tu-w", "content": "ok"},
+                    {"type": "tool_result", "tool_use_id": "tu-e", "content": "ok"},
                 ],
             },
         },
     ])
     harvest = walk_transcript(path)
     assert harvest.files_touched == ("/src/bar.py", "/src/foo.py")
-    assert harvest.raw_message_count == 1
+    assert harvest.raw_message_count == 2
 
 
 def test_walk_aggregates_tool_use_with_counts(tmp_path):
@@ -149,8 +159,12 @@ def test_walk_respects_timestamp_window(tmp_path):
                                    "input": {"file_path": "/before.py"}}]}},
         {"timestamp": "2026-05-19T10:00:00Z",
          "message": {"role": "assistant", "model": "current",
-                      "content": [{"type": "tool_use", "name": "Write",
+                      "content": [{"type": "tool_use", "id": "tu-within", "name": "Write",
                                    "input": {"file_path": "/within.py"}}]}},
+        {"timestamp": "2026-05-19T10:00:30Z",
+         "message": {"role": "user",
+                      "content": [{"type": "tool_result", "tool_use_id": "tu-within",
+                                   "content": "ok"}]}},
         {"timestamp": "2026-05-19T11:00:00Z",
          "message": {"role": "assistant", "model": "later",
                       "content": [{"type": "tool_use", "name": "Edit",
@@ -330,3 +344,31 @@ def test_walk_handles_flat_content_string(tmp_path):
     assert harvest.model_observations == ("m",)
     assert harvest.tool_use == ()
     assert harvest.files_touched == ()
+
+
+def test_walk_excludes_denied_write(tmp_path):
+    """A Write whose tool_result is_error=true must NOT become a touched file."""
+    path = tmp_path / "sess.jsonl"
+    _write_jsonl(path, [
+        {"timestamp": "2026-05-19T10:00:00Z",
+         "message": {"role": "assistant", "model": "m",
+                     "content": [{"type": "tool_use", "id": "tu-deny", "name": "Write",
+                                  "input": {"file_path": "/denied.md", "content": "x"}}]}},
+        {"timestamp": "2026-05-19T10:00:01Z",
+         "message": {"role": "user",
+                     "content": [{"type": "tool_result", "tool_use_id": "tu-deny",
+                                  "is_error": True, "content": "Permission to use Write denied"}]}},
+    ])
+    assert walk_transcript(path).files_touched == ()
+
+
+def test_walk_excludes_write_with_no_result(tmp_path):
+    """A Write with no matching tool_result (never completed) is not counted."""
+    path = tmp_path / "sess.jsonl"
+    _write_jsonl(path, [
+        {"timestamp": "2026-05-19T10:00:00Z",
+         "message": {"role": "assistant", "model": "m",
+                     "content": [{"type": "tool_use", "id": "tu-orphan", "name": "Write",
+                                  "input": {"file_path": "/orphan.md", "content": "x"}}]}},
+    ])
+    assert walk_transcript(path).files_touched == ()
