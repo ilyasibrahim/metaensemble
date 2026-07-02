@@ -246,6 +246,24 @@ def _pending_transcript_has_budget_marker(pending: PendingRun) -> bool:
     return any(marker in text for marker in _BUDGET_MARKERS)
 
 
+def _quarantine_sidecar(state_dir: Path, entry: Path) -> Path:
+    """Move a sidecar that failed to record to `<state>/pending/quarantine/`.
+
+    A sidecar the reconciler cannot turn into a Run row (FK violation,
+    corrupt fields, ...) would otherwise be retried — and re-fail — on
+    every future session start. Quarantining it preserves the evidence
+    for manual inspection while taking it out of the reconcile scan path:
+    `_iter_pending` only globs `pending/*.json`, so the subdirectory is
+    naturally excluded. `Path.replace` overwrites any stale quarantine
+    copy of the same run_id.
+    """
+    dest_dir = pending_dir(state_dir) / "quarantine"
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest = dest_dir / entry.name
+    entry.replace(dest)
+    return dest
+
+
 def _iter_pending(state_dir: Path) -> list[tuple[Path, PendingRun]]:
     """Walk the pending directory and yield (path, parsed-sidecar) pairs.
 
@@ -371,14 +389,30 @@ def reconcile_stale_pending(
             )
         except Exception as exc:
             # One malformed or uncooperative sidecar must never take down the
-            # whole reconcile pass (and with it session_start). Log and skip.
+            # whole reconcile pass (and with it session_start) — and it must
+            # never be retried on every future session either. Quarantine it,
+            # log where it went, and keep walking.
+            quarantined_to: Path | None = None
+            try:
+                quarantined_to = _quarantine_sidecar(state_dir, entry)
+            except OSError:
+                # Move failed (e.g. file vanished mid-pass). The old
+                # log-and-skip behavior still applies below.
+                quarantined_to = None
             try:
                 from metaensemble.hooks._common import log_error
 
                 log_error(
-                    "reconcile-sidecar-failed",
+                    "reconcile-sidecar-quarantined"
+                    if quarantined_to is not None
+                    else "reconcile-sidecar-failed",
                     str(exc),
-                    {"run_id": getattr(pending, "run_id", None)},
+                    {
+                        "run_id": getattr(pending, "run_id", None),
+                        "quarantine_path": (
+                            str(quarantined_to) if quarantined_to else None
+                        ),
+                    },
                 )
             except Exception:
                 pass

@@ -408,8 +408,8 @@ def test_reconcile_handles_missing_executor(tmp_ledger, seeded_task, state_root)
     propagate, which crashed session_start ('(state unavailable)'). The
     per-sidecar guard must now contain it: the pass completes without
     raising and a single malformed sidecar cannot take down the whole
-    reconcile. The failure is recorded via the 'reconcile-sidecar-failed'
-    log rather than thrown.
+    reconcile. The failure is quarantined and recorded via the
+    'reconcile-sidecar-quarantined' log rather than thrown.
     """
     pending = _make_pending(
         executor_id="ghost-executor",
@@ -429,6 +429,96 @@ def test_reconcile_handles_missing_executor(tmp_ledger, seeded_task, state_root)
         r.executor_id != "ghost-executor"
         for r in tmp_ledger.get_recent_runs(limit=10)
     )
+
+
+def test_failing_sidecar_quarantined_once(
+    tmp_ledger, seeded_task, state_root, isolated_home
+):
+    """A sidecar that cannot be recorded is quarantined on the first pass
+    and never re-processed: retrying a permanent failure on every future
+    session start would re-fail forever and spam the hook error log."""
+    # The FK failure path only exists with foreign_keys enforced; the Ledger
+    # connection turns it on at connect time. Pin that assumption here so a
+    # future PRAGMA change cannot silently turn this test into a no-op.
+    assert tmp_ledger._conn.execute("PRAGMA foreign_keys").fetchone()[0] == 1
+    pending = _make_pending(
+        executor_id="ghost-executor",
+        task_id=seeded_task,
+        started_ts=(datetime.now(timezone.utc) - timedelta(hours=2)).isoformat(),
+    )
+    write_pending(state_root, pending)
+
+    first = reconcile_stale_pending(tmp_ledger, state_root, max_age=timedelta(hours=1))
+
+    quarantined = pending_dir(state_root) / "quarantine" / "run-001.json"
+    assert first == []
+    assert quarantined.exists()  # moved, evidence preserved
+    assert not (pending_dir(state_root) / "run-001.json").exists()
+
+    # Pass 2: the quarantined sidecar is outside the scan path entirely.
+    second = reconcile_stale_pending(tmp_ledger, state_root, max_age=timedelta(hours=1))
+
+    assert second == []
+    assert quarantined.exists()
+    assert len(tmp_ledger.get_recent_runs(limit=10)) == 0
+
+    # Exactly one quarantine event, carrying the destination path — pass 2
+    # must not have touched (or re-logged) the sidecar.
+    log_path = isolated_home / ".metaensemble" / "hooks" / "log.jsonl"
+    entries = [json.loads(line) for line in log_path.read_text().splitlines()]
+    quarantine_entries = [
+        e for e in entries if e["kind"] == "reconcile-sidecar-quarantined"
+    ]
+    assert len(quarantine_entries) == 1
+    assert quarantine_entries[0]["context"]["run_id"] == "run-001"
+    assert quarantine_entries[0]["context"]["quarantine_path"] == str(quarantined)
+
+
+def test_iter_pending_excludes_quarantine_subdir(tmp_ledger, state_root):
+    """Pin the exclusion the quarantine relies on: `_iter_pending` globs only
+    `pending/*.json`, so even a perfectly valid sidecar parked under
+    `pending/quarantine/` is invisible to both reconcile layers."""
+    from dataclasses import asdict
+
+    from metaensemble.lib.reconcile import _iter_pending
+
+    pending = _make_pending(
+        started_ts=(datetime.now(timezone.utc) - timedelta(hours=2)).isoformat(),
+    )
+    quarantine = pending_dir(state_root) / "quarantine"
+    quarantine.mkdir(parents=True)
+    (quarantine / "run-001.json").write_text(json.dumps(asdict(pending)))
+
+    assert _iter_pending(state_root) == []
+    assert reconcile_stale_pending(tmp_ledger, state_root) == []
+    assert reconcile_session_pending(tmp_ledger, state_root, pending.session_id) == []
+    assert len(tmp_ledger.get_recent_runs(limit=10)) == 0
+    assert (quarantine / "run-001.json").exists()  # left untouched
+
+
+def test_reconcile_error_log_is_isolated_from_repo(
+    tmp_ledger, seeded_task, state_root, isolated_home
+):
+    """Regression for the state leak: a deliberately-failing reconcile pass
+    must write its error log under the per-test isolated home, never into the
+    ambient project's `.metaensemble/hooks/log.jsonl` (which is what
+    `hooks_log_path()` resolves to when pytest runs from the repo root)."""
+    ambient_log = Path.cwd() / ".metaensemble" / "hooks" / "log.jsonl"
+    size_before = ambient_log.stat().st_size if ambient_log.exists() else -1
+
+    pending = _make_pending(
+        executor_id="ghost-executor",
+        task_id=seeded_task,
+        started_ts=(datetime.now(timezone.utc) - timedelta(hours=2)).isoformat(),
+    )
+    write_pending(state_root, pending)
+    reconcile_stale_pending(tmp_ledger, state_root, max_age=timedelta(hours=1))
+
+    size_after = ambient_log.stat().st_size if ambient_log.exists() else -1
+    assert size_before == size_after  # ambient project log untouched
+    isolated_log = isolated_home / ".metaensemble" / "hooks" / "log.jsonl"
+    assert isolated_log.exists()
+    assert '"run_id": "run-001"' in isolated_log.read_text()
 
 
 def test_stale_reconcile_clears_residue_and_matching_marker(
