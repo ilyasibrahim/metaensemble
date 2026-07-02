@@ -14,13 +14,18 @@ responsibilities (per ARCHITECTURE.md §8):
 4. Estimate token cost from the prompt text and run the cost gate.
 5. Stamp a pending-Run sidecar on disk so PostToolUse can complete the
    record.
-6. Either allow the Task (exit 0) or block it (exit 2 with structured
-   reason payload).
+6. Either allow the Task or block it through the runtime's native
+   permission surface (the runtime ignores stdout JSON on non-zero
+   exits, so blocking is a JSON decision, not an exit code).
 
 Hook contract:
 - Stdin: agent runtime payload
-- Stdout: JSON with `continue`, optional `stopReason`, `systemMessage`
-- Exit: 0 (allow / notify), 2 (block)
+- Stdout: JSON. Allow: `continue: true` (NOTIFY adds `systemMessage`).
+  Block: the native PreToolUse permission decision
+  (`hookSpecificOutput.permissionDecision: "deny"` with
+  `permissionDecisionReason`) plus the legacy `decision: "block"` /
+  `reason` pair for older runtimes.
+- Exit: 0 on every decided path; non-zero only on unexpected crash
 """
 from __future__ import annotations
 
@@ -154,7 +159,7 @@ def _remaining_window(
     return remaining, used, breakdown
 
 
-# The same three structured options apply on both NOTIFY and BLOCK so the
+# The same four structured options apply on both NOTIFY and BLOCK so the
 # Principal never has to invent the right intervention under time pressure.
 # What differs between the two states is the *default* action: NOTIFY
 # proceeds in a moment unless intercepted, BLOCK pauses outright until the
@@ -163,7 +168,33 @@ _DECISION_OPTIONS: tuple[dict, ...] = (
     {"id": 1, "label": "Approve and proceed at current tier"},
     {"id": 2, "label": "Drop the model tier and retry (haiku/sonnet)"},
     {"id": 3, "label": "Split the Task into smaller Manifests"},
+    {"id": 4, "label": "Send the Manifest back for revision"},
 )
+
+
+def _block_payload(stop_reason: str) -> dict:
+    """Build the stdout payload for a blocked dispatch.
+
+    The runtime only parses stdout JSON on exit 0, so blocking rides the
+    JSON decision contract rather than the exit code: the native
+    PreToolUse permission decision under `hookSpecificOutput` for
+    runtimes that consume the permission surface (a proper denial
+    instead of a generic hook error), plus the legacy top-level
+    `decision`/`reason` pair for runtimes that predate it. The reason
+    text is identical on both channels. `continue` is deliberately
+    absent — `continue: false` halts the whole turn, while a denied
+    dispatch must leave the Coordinator free to present the structured
+    options to the Principal.
+    """
+    return {
+        "decision": "block",
+        "reason": stop_reason,
+        "hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "permissionDecision": "deny",
+            "permissionDecisionReason": stop_reason,
+        },
+    }
 
 
 def _format_decision_surface(
@@ -264,9 +295,8 @@ def _resolve_manifest(
 
     Returns `(manifest_path, manifest_data, task_type, budget_from_manifest,
     early_exit_code)`. `early_exit_code` is non-None when the caller should
-    return immediately — it carries the exit code to return after the hook
-    has emitted the appropriate stopReason payload. The caller is
-    responsible for emitting before returning.
+    return immediately — the block payload (native permission denial plus
+    the legacy decision/reason pair) has already been emitted here.
     """
     if not manifest_id:
         return None, None, "task", None, None
@@ -289,8 +319,8 @@ def _resolve_manifest(
             {"manifest_id": manifest_id, "path": str(resolved)},
         )
         reason = _explain_manifest_failure(exc, manifest_id, resolved)
-        emit({"continue": False, "stopReason": reason})
-        return None, None, "task", None, 2
+        emit(_block_payload(reason))
+        return None, None, "task", None, 0
 
     task_type = manifest_data.get("task", "task")
     constraints = manifest_data.get("constraints") or {}
@@ -332,14 +362,12 @@ def _emit_decision_result(
         run_state_dir,
         blocked=blocked,
     )
-    payload = {
-        "continue": not blocked,
-        ("stopReason" if blocked else "systemMessage"): _format_decision_surface(
-            decision, estimated_tokens, blocked=blocked,
-        ),
-    }
-    emit(payload)
-    return 2 if blocked else 0
+    surface = _format_decision_surface(decision, estimated_tokens, blocked=blocked)
+    if blocked:
+        emit(_block_payload(surface))
+        return 0
+    emit({"continue": True, "systemMessage": surface})
+    return 0
 
 
 def run() -> int:
@@ -389,8 +417,8 @@ def run() -> int:
                 f"(got {raw}). The dispatch is rejected before any Executor "
                 "work happens."
             )
-            emit({"continue": False, "stopReason": stop_reason})
-            return 2
+            emit(_block_payload(stop_reason))
+            return 0
 
     try:
         ledger = Ledger(

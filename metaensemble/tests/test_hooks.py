@@ -342,7 +342,10 @@ def test_pre_task_notify_surfaces_structured_options(state_root):
     assert "Options:" in msg
     assert "Drop the model tier" in msg
     assert "Split the Task" in msg
+    assert "Send the Manifest back for revision" in msg
     assert "Default: proceed" in msg
+    # NOTIFY proceeds — it must not carry a native permission decision.
+    assert "hookSpecificOutput" not in payload
     # Sentinel for the Coordinator to surface.
     notifies_dir = state_root / "notifies"
     assert notifies_dir.exists()
@@ -351,7 +354,7 @@ def test_pre_task_notify_surfaces_structured_options(state_root):
     record = json.loads(sentinels[0].read_text())
     assert record["state"] == "notify"
     assert record["default"] == "proceed"
-    assert len(record["options"]) == 3
+    assert len(record["options"]) == 4
 
 
 def test_pre_task_block_surfaces_structured_options(state_root):
@@ -373,12 +376,13 @@ def test_pre_task_block_surfaces_structured_options(state_root):
         },
         state_root,
     )
-    assert code == 2
+    assert code == 0
     payload = json.loads(out)
-    assert payload["continue"] is False
-    msg = payload["stopReason"]
+    assert payload["decision"] == "block"
+    msg = payload["reason"]
     assert "cost gate — block" in msg.lower()
     assert "Options:" in msg
+    assert "Send the Manifest back for revision" in msg
     assert "Default: paused" in msg
     blocks_dir = state_root / "blocks"
     sentinels = list(blocks_dir.glob("sess-block-*.json"))
@@ -386,7 +390,44 @@ def test_pre_task_block_surfaces_structured_options(state_root):
     record = json.loads(sentinels[0].read_text())
     assert record["state"] == "block"
     assert record["default"] == "paused"
-    assert len(record["options"]) == 3
+    assert len(record["options"]) == 4
+    assert record["options"][3]["label"] == "Send the Manifest back for revision"
+
+
+def test_pre_task_block_emits_native_permission_denial(state_root):
+    """A BLOCK must ride the runtime's native PreToolUse permission
+    decision (exit 0 — the runtime ignores stdout JSON on non-zero
+    exits), so the full decision surface reaches the Coordinator as a
+    proper denial reason instead of a generic hook error. The legacy
+    `decision`/`reason` pair rides along for runtimes that predate
+    `hookSpecificOutput`."""
+    _open_ledger(state_root).close()
+    big_prompt = "x" * 160_000
+    code, out, _ = _invoke(
+        "pre_task.py",
+        {
+            "tool_name": "Task",
+            "session_id": "sess-deny",
+            "tool_input": {
+                "subagent_type": "backend",
+                "description": "outsized task",
+                "prompt": big_prompt,
+            },
+        },
+        state_root,
+    )
+    assert code == 0
+    payload = json.loads(out)
+    assert payload["decision"] == "block"
+    assert "continue" not in payload  # continue:false would halt the turn
+    specific = payload["hookSpecificOutput"]
+    assert specific["hookEventName"] == "PreToolUse"
+    assert specific["permissionDecision"] == "deny"
+    reason = specific["permissionDecisionReason"]
+    assert reason
+    # Both channels carry the same decision surface.
+    assert reason == payload["reason"]
+    assert "cost gate — block" in reason.lower()
 
 
 def test_pre_task_blocks_when_prompt_exceeds_hard_threshold(state_root):
@@ -408,11 +449,11 @@ def test_pre_task_blocks_when_prompt_exceeds_hard_threshold(state_root):
         },
         state_root,
     )
-    assert code == 2
+    assert code == 0
     payload = json.loads(out)
-    assert payload["continue"] is False
+    assert payload["decision"] == "block"
     # The block reason should mention either run-size or window pressure.
-    reason = payload["stopReason"].lower()
+    reason = payload["reason"].lower()
     assert "block" in reason
 
 
@@ -432,12 +473,14 @@ def test_pre_task_rejects_fanout_one(state_root):
         },
         state_root,
     )
-    assert code == 2
+    assert code == 0
     payload = json.loads(out)
-    assert payload["continue"] is False
-    reason = payload["stopReason"]
+    assert payload["decision"] == "block"
+    reason = payload["reason"]
     assert "--fanout requires N >= 2" in reason
     assert "(got 1)" in reason
+    # Every pre_task block path carries the native permission denial.
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
     # No pending sidecar should have been written for the rejected dispatch.
     pending_dir = state_root / "pending"
     if pending_dir.exists():
@@ -460,9 +503,10 @@ def test_pre_task_rejects_consensus_one(state_root):
         },
         state_root,
     )
-    assert code == 2
+    assert code == 0
     payload = json.loads(out)
-    assert "--consensus requires N >= 2" in payload["stopReason"]
+    assert payload["decision"] == "block"
+    assert "--consensus requires N >= 2" in payload["reason"]
 
 
 def test_pre_task_accepts_fanout_two(state_root):
@@ -506,8 +550,8 @@ def test_pre_task_rejects_fanout_zero_and_negatives(state_root):
         # `[fanout: -1]` does not match the digit-only regex, so it goes
         # through unguarded — pin the digit-only case (0) as a hard block.
         if prompt_marker == "[fanout: 0]":
-            assert code == 2
-            assert "--fanout requires N >= 2" in json.loads(out)["stopReason"]
+            assert code == 0
+            assert "--fanout requires N >= 2" in json.loads(out)["reason"]
 
 
 def test_pre_task_yaml_error_produces_actionable_message(state_root, tmp_path):
@@ -546,10 +590,10 @@ def test_pre_task_yaml_error_produces_actionable_message(state_root, tmp_path):
         },
         state_root,
     )
-    assert code == 2
+    assert code == 0
     payload = json.loads(out)
-    assert payload["continue"] is False
-    reason = payload["stopReason"]
+    assert payload["decision"] == "block"
+    reason = payload["reason"]
     assert "YAML parser" in reason or "line" in reason
     assert mid in reason
 
@@ -582,10 +626,10 @@ def test_pre_task_schema_error_names_the_field(state_root, tmp_path):
         },
         state_root,
     )
-    assert code == 2
+    assert code == 0
     payload = json.loads(out)
-    assert payload["continue"] is False
-    reason = payload["stopReason"]
+    assert payload["decision"] == "block"
+    reason = payload["reason"]
     assert mid in reason
     assert "Schema" in reason or "schema" in reason
 
