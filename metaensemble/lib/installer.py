@@ -47,6 +47,12 @@ OUTPUT_STYLES_SUBDIR = "output-styles"
 SETTINGS_FILE = "settings.json"
 INSPECTION_SNAPSHOT_KEEP = 5
 
+# Memory files the runtime auto-loads for a project, relative to the
+# project root, in the runtime's load order. Recorded at inspection time
+# so downstream surfaces (Manifest scaffolding, dispatch context) point
+# at the runtime's own memory rather than rebuilding a parallel store.
+PROJECT_MEMORY_SURFACES = ("CLAUDE.md", ".claude/CLAUDE.md", "CLAUDE.local.md")
+
 CORE_DIR = Path(__file__).resolve().parent.parent  # metaensemble/
 
 
@@ -411,6 +417,20 @@ class OverlapDecision:
 
 
 @dataclass(frozen=True)
+class MemorySurface:
+    """A memory file the runtime already loads for this project.
+
+    Recorded at inspection time so downstream consumers (Manifest
+    scaffolding, dispatch context) can route work through the runtime's
+    own memory files. MetaEnsemble only points at these surfaces; it
+    never writes them.
+    """
+
+    path: str            # relative to the project root, POSIX-style
+    scope: str = "project"
+
+
+@dataclass(frozen=True)
 class SurveyDecisions:
     """The full per-agent / per-curated-Role decision set the user can edit.
 
@@ -424,6 +444,7 @@ class SurveyDecisions:
     layout_rationale: str = ""
     report_root: str = ".metaensemble/reports"
     overlaps: list[OverlapDecision] = field(default_factory=list)
+    memory_surfaces: list[MemorySurface] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -1401,6 +1422,24 @@ def detect_report_root(project_root: Path) -> str:
     return ".metaensemble/reports"
 
 
+def detect_memory_surfaces(project_root: Path) -> list[MemorySurface]:
+    """Detect the memory files the runtime already loads for this project.
+
+    Pure existence checks against the runtime's documented memory
+    locations (`PROJECT_MEMORY_SURFACES`), in load order. The result is
+    recorded in `install-decisions.yaml` so Manifest scaffolding and
+    dispatch context consume the runtime's memory surfaces directly.
+    Absent files are simply not listed, and detection is regenerative
+    rather than accumulative, so re-running adopt never duplicates
+    entries.
+    """
+    return [
+        MemorySurface(path=rel, scope="project")
+        for rel in PROJECT_MEMORY_SURFACES
+        if (project_root / rel).is_file()
+    ]
+
+
 # --- Agent comparison + decisions ----------------------------------------
 
 
@@ -1617,6 +1656,7 @@ def build_default_decisions(
         layout_rationale=rationale,
         report_root=detect_report_root(project or Path.cwd()),
         overlaps=detect_overlaps(project or Path.cwd()),
+        memory_surfaces=detect_memory_surfaces(project or Path.cwd()),
     )
 
 
@@ -1636,8 +1676,21 @@ def _decisions_to_yaml_doc(decisions: SurveyDecisions) -> str:
         f"suggested_layout: {decisions.suggested_layout}",
         f"report_root: {json.dumps(decisions.report_root)}",
         "",
-        "overlaps:",
+        "# Memory files the runtime already loads for this project. MetaEnsemble",
+        "# consumes these as dispatch context (scaffolded Manifest `context.files`",
+        "# entries with `role: memory`); it never rewrites them.",
+        "memory_surfaces:",
     ]
+    if decisions.memory_surfaces:
+        for surface in decisions.memory_surfaces:
+            lines.append(f"  - path: {json.dumps(surface.path)}")
+            lines.append(f"    scope: {surface.scope}")
+    else:
+        lines.append("  []")
+    lines.extend([
+        "",
+        "overlaps:",
+    ])
     if decisions.overlaps:
         for overlap in decisions.overlaps:
             lines.append(f"  {overlap.category}:")
@@ -1722,6 +1775,25 @@ def load_decisions(path: Path) -> SurveyDecisions:
         # convention from the project so established `.claude/reports` projects
         # do not get silently treated as greenfield on the next adopt.
         report_root = detect_report_root(path.parent.parent)
+    memory_surfaces: list[MemorySurface] = []
+    if "memory_surfaces" in data:
+        memory_raw = data.get("memory_surfaces") or []
+        if isinstance(memory_raw, list):
+            for entry in memory_raw:
+                if not isinstance(entry, dict):
+                    continue
+                surface_path = str(entry.get("path", "")).strip()
+                if not surface_path:
+                    continue
+                memory_surfaces.append(MemorySurface(
+                    path=surface_path,
+                    scope=str(entry.get("scope") or "project").strip(),
+                ))
+    else:
+        # Older install-decisions.yaml files predate `memory_surfaces`.
+        # Re-detect from the project so established adopts gain the memory
+        # pointers without waiting for a fresh inspection.
+        memory_surfaces = detect_memory_surfaces(path.parent.parent)
 
     return SurveyDecisions(
         agents=agents,
@@ -1732,6 +1804,7 @@ def load_decisions(path: Path) -> SurveyDecisions:
         layout_rationale="",
         report_root=report_root,
         overlaps=overlaps,
+        memory_surfaces=memory_surfaces,
     )
 
 

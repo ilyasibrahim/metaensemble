@@ -329,6 +329,123 @@ def test_detect_report_root_preserves_existing_claude_reports_convention(tmp_pat
     assert detect_report_root(project) == ".claude/reports"
 
 
+# --- Memory surfaces --------------------------------------------------------
+
+
+def test_detect_memory_surfaces_lists_present_files_in_load_order(tmp_path):
+    from metaensemble.lib.installer import detect_memory_surfaces
+
+    project = tmp_path / "project"
+    (project / ".claude").mkdir(parents=True)
+    (project / "CLAUDE.md").write_text("# project memory\n")
+    (project / ".claude" / "CLAUDE.md").write_text("# scoped memory\n")
+
+    surfaces = detect_memory_surfaces(project)
+
+    assert [(s.path, s.scope) for s in surfaces] == [
+        ("CLAUDE.md", "project"),
+        (".claude/CLAUDE.md", "project"),
+    ]
+
+
+def test_detect_memory_surfaces_empty_without_memory_files(tmp_path):
+    from metaensemble.lib.installer import detect_memory_surfaces
+
+    project = tmp_path / "project"
+    project.mkdir()
+
+    assert detect_memory_surfaces(project) == []
+
+
+def test_survey_records_memory_surfaces_in_decisions(tmp_path):
+    import yaml
+
+    home = tmp_path / "home"
+    home.mkdir()
+    project = tmp_path / "proj"
+    project.mkdir()
+    (project / "CLAUDE.md").write_text("# project memory\n")
+
+    result = survey(home=home, project=project, write_report=True)
+
+    data = yaml.safe_load(result.decisions_path.read_text())
+    assert data["memory_surfaces"] == [{"path": "CLAUDE.md", "scope": "project"}]
+
+
+def test_survey_decisions_memory_surfaces_empty_without_memory_files(tmp_path):
+    import yaml
+
+    home = tmp_path / "home"
+    home.mkdir()
+    project = tmp_path / "proj"
+    project.mkdir()
+
+    result = survey(home=home, project=project, write_report=True)
+
+    data = yaml.safe_load(result.decisions_path.read_text())
+    assert data["memory_surfaces"] == []
+
+
+def test_resurvey_does_not_duplicate_memory_surfaces(tmp_path):
+    """Re-adopt runs the inspection again; the editable decisions file must
+    keep exactly one entry per surface, not accumulate a copy per run."""
+    import yaml
+
+    home = tmp_path / "home"
+    home.mkdir()
+    project = tmp_path / "proj"
+    project.mkdir()
+    (project / "CLAUDE.md").write_text("# project memory\n")
+
+    first = survey(home=home, project=project, write_report=True)
+    second = survey(home=home, project=project, write_report=True)
+
+    assert first.decisions_path == second.decisions_path
+    data = yaml.safe_load(second.decisions_path.read_text())
+    assert data["memory_surfaces"] == [{"path": "CLAUDE.md", "scope": "project"}]
+
+
+def test_load_decisions_round_trips_memory_surfaces(tmp_path):
+    from metaensemble.lib.installer import load_decisions
+
+    home = tmp_path / "home"
+    home.mkdir()
+    project = tmp_path / "proj"
+    project.mkdir()
+    (project / "CLAUDE.md").write_text("# project memory\n")
+    (project / "CLAUDE.local.md").write_text("# local memory\n")
+
+    result = survey(home=home, project=project, write_report=True)
+    decisions = load_decisions(result.decisions_path)
+
+    assert [(s.path, s.scope) for s in decisions.memory_surfaces] == [
+        ("CLAUDE.md", "project"),
+        ("CLAUDE.local.md", "project"),
+    ]
+
+
+def test_load_decisions_redetects_memory_surfaces_for_older_files(tmp_path):
+    """Decisions files written before `memory_surfaces` existed must gain
+    the memory pointers on load, mirroring the `report_root` fallback."""
+    from metaensemble.lib.installer import load_decisions
+
+    project = tmp_path / "proj"
+    (project / ".metaensemble").mkdir(parents=True)
+    (project / "CLAUDE.md").write_text("# project memory\n")
+    decisions_path = project / ".metaensemble" / "install-decisions.yaml"
+    decisions_path.write_text(
+        "suggested_layout: namespaced\n"
+        'report_root: ".metaensemble/reports"\n'
+        "agents: []\n"
+    )
+
+    decisions = load_decisions(decisions_path)
+
+    assert [(s.path, s.scope) for s in decisions.memory_surfaces] == [
+        ("CLAUDE.md", "project"),
+    ]
+
+
 def test_user_setup_applies_only_user_scope_actions(tmp_path, monkeypatch):
     """`cmd_user_setup` writes the launcher, the runtime symlinks, and
     the settings.json merge — but does NOT create per-project state.

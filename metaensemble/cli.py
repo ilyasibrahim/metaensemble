@@ -292,27 +292,14 @@ def cmd_manifest(args: argparse.Namespace) -> int:
         return 0
 
     if args.subcmd == "scaffold":
-        import json as _json
-        from metaensemble.lib.ids import uuid7
-        # JSON is a YAML 1.2 subset for scalars, so `json.dumps` produces
-        # a fully-escaped double-quoted YAML scalar — safe for tasks with
-        # colons, hashes, quotes, or any other YAML metacharacter.
-        # Raw f-string interpolation would emit `task: ship: feature` for
-        # a task of `ship: feature`, which PyYAML rejects.
-        task_yaml = _json.dumps(args.task)
-        body = (
-            f"manifest_id: hm-{uuid7()}\n"
-            f"version: 1\n"
-            f"task: {task_yaml}\n"
-            f"context:\n"
-            f"  files: []  # TODO: at least one {{path, lines?, role?}} entry\n"
-            f"expected_deliverables: []  # TODO: at least one {{path, must_export?, coverage?, schema?}}\n"
-            f"constraints:\n"
-            f"  model_tier: TODO  # opus | sonnet | haiku\n"
-            f"  window_budget: 0  # TODO: positive integer token budget\n"
-            f"acceptance:\n"
-            f"  - TODO: one acceptance criterion per line\n"
-        )
+        from metaensemble.lib.manifest import scaffold_manifest
+
+        # The library renderer owns the starter-YAML shape (TODO markers,
+        # task escaping) and pre-fills `context.files` with the project's
+        # detected memory surfaces ({path, role: memory}) so the receiving
+        # Executor is handed the runtime's memory files instead of
+        # re-discovering them.
+        body = scaffold_manifest(args.task, project=Path.cwd())
         out_path = getattr(args, "output", None)
         if out_path:
             # SKILL.md advertises writing into `.metaensemble/manifests/`,

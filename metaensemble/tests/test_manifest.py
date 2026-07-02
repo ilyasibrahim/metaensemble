@@ -3,10 +3,12 @@ from __future__ import annotations
 
 
 import pytest
+import yaml
 from jsonschema.exceptions import ValidationError
 
 from metaensemble.lib.ids import uuid7
 from metaensemble.lib.manifest import (
+    scaffold_manifest,
     validate_brief,
     validate_manifest,
     validate_role_frontmatter,
@@ -244,6 +246,20 @@ def test_manifest_schema_requires_minimum_one_context_file():
     )
 
 
+def test_manifest_schema_accepts_memory_role_in_context_files():
+    """`context.files[].role` is a free-form string; `memory` marks entries
+    that point at the runtime's own memory files (CLAUDE.md and friends)."""
+    manifest = {
+        "manifest_id": _hm(),
+        "version": 1,
+        "task": "implement-auth",
+        "context": {"files": [{"path": "CLAUDE.md", "role": "memory"}]},
+        "expected_deliverables": [{"path": "src/handlers.py"}],
+        "constraints": {"model_tier": "sonnet", "window_budget": 8000},
+    }
+    validate_manifest(manifest)
+
+
 def test_manifest_schema_accepts_delegates_to():
     """v3.1 schema patch: `delegates_to` is part of the top-level set.
     The Coordinator uses it to dispatch sibling sub-Roles in parallel
@@ -264,3 +280,95 @@ def test_manifest_schema_accepts_delegates_to():
         ],
     }
     validate_manifest(manifest)
+
+
+# --- Manifest scaffold ------------------------------------------------------
+
+
+def test_scaffold_prefills_memory_surfaces_from_install_decisions(tmp_path):
+    """An adopted project's recorded memory surfaces become `role: memory`
+    context entries, in the recorded order."""
+    project = tmp_path / "proj"
+    (project / ".metaensemble").mkdir(parents=True)
+    (project / ".metaensemble" / "install-decisions.yaml").write_text(
+        "memory_surfaces:\n"
+        '  - path: "CLAUDE.md"\n'
+        "    scope: project\n"
+        '  - path: ".claude/CLAUDE.md"\n'
+        "    scope: project\n"
+    )
+
+    data = yaml.safe_load(scaffold_manifest("ship-feature", project=project))
+
+    assert data["context"]["files"] == [
+        {"path": "CLAUDE.md", "role": "memory"},
+        {"path": ".claude/CLAUDE.md", "role": "memory"},
+    ]
+    assert data["task"] == "ship-feature"
+
+
+def test_scaffold_prefills_claude_md_when_never_adopted(tmp_path):
+    """Without install-decisions.yaml, a bare `CLAUDE.md` at the project
+    root is enough to pre-fill the memory context entry."""
+    project = tmp_path / "proj"
+    project.mkdir()
+    (project / "CLAUDE.md").write_text("# project memory\n")
+
+    data = yaml.safe_load(scaffold_manifest("ship-feature", project=project))
+
+    assert data["context"]["files"] == [{"path": "CLAUDE.md", "role": "memory"}]
+
+
+def test_scaffold_context_files_stay_todo_without_memory_surfaces(tmp_path):
+    project = tmp_path / "proj"
+    project.mkdir()
+
+    data = yaml.safe_load(scaffold_manifest("ship-feature", project=project))
+
+    assert data["context"]["files"] == []
+
+
+def test_scaffold_respects_explicitly_empty_memory_surfaces(tmp_path):
+    """A decisions file that records zero surfaces is authoritative — the
+    scaffold must not second-guess it with filesystem probes."""
+    project = tmp_path / "proj"
+    (project / ".metaensemble").mkdir(parents=True)
+    (project / ".metaensemble" / "install-decisions.yaml").write_text(
+        "memory_surfaces:\n  []\n"
+    )
+    (project / "CLAUDE.md").write_text("# project memory\n")
+
+    data = yaml.safe_load(scaffold_manifest("ship-feature", project=project))
+
+    assert data["context"]["files"] == []
+
+
+def test_scaffold_with_memory_prefill_fails_only_on_intended_todos(tmp_path):
+    """The memory pre-fill satisfies `context.files` minItems; the scaffold
+    must still fail validation on its TODO fields, and pass once those —
+    and only those — are filled in."""
+    project = tmp_path / "proj"
+    project.mkdir()
+    (project / "CLAUDE.md").write_text("# project memory\n")
+
+    data = yaml.safe_load(scaffold_manifest("ship-feature", project=project))
+    with pytest.raises(ValidationError):
+        validate_manifest(data)
+
+    # Fill the TODOs, leaving the pre-filled memory context untouched.
+    data["expected_deliverables"] = [{"path": "src/feature.py"}]
+    data["constraints"] = {"model_tier": "sonnet", "window_budget": 4000}
+    data["acceptance"] = ["tests pass", "no regressions"]
+    validate_manifest(data)
+
+
+def test_scaffold_handles_task_with_yaml_metacharacters(tmp_path):
+    """The task scalar must round-trip through yaml.safe_load verbatim even
+    with colons, hashes, and quotes."""
+    project = tmp_path / "proj"
+    project.mkdir()
+    weird = "ship: feature # with hash & quote 'x'"
+
+    data = yaml.safe_load(scaffold_manifest(weird, project=project))
+
+    assert data["task"] == weird

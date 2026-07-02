@@ -1,8 +1,12 @@
-"""Manifest, Brief, and Role schema validation for MetaEnsemble.
+"""Manifest, Brief, and Role schema validation — and Manifest scaffolding.
 
 Manifests are YAML on disk; Briefs and Role frontmatter are JSON-shaped
 even when written in YAML. All three are validated against the schemas in
 `metaensemble/schemas/` using a cached Draft 2020-12 validator (PERFORMANCE.md R3).
+
+Scaffolding lives here rather than in the CLI so the starter Manifest can
+consume the project's recorded memory surfaces (installer inspection state)
+without the CLI knowing the file formats involved.
 """
 from __future__ import annotations
 
@@ -13,6 +17,8 @@ from typing import Any
 
 import yaml
 from jsonschema import Draft202012Validator
+
+from metaensemble.lib.ids import uuid7
 
 
 SCHEMA_DIR = Path(__file__).resolve().parent.parent / "schemas"
@@ -53,3 +59,81 @@ def validate_brief(data: dict[str, Any]) -> None:
 def validate_role_frontmatter(data: dict[str, Any]) -> None:
     """Validate Role spec frontmatter against role.schema.json."""
     _validator("role.schema.json").validate(data)
+
+
+def _memory_surface_paths(project_root: Path) -> list[str]:
+    """Memory-surface paths the scaffold should pre-fill, project-relative.
+
+    Adopted projects record their memory surfaces in
+    `.metaensemble/install-decisions.yaml` (written by the installer's
+    inspection); that record is authoritative when present. Projects that
+    were never adopted — or whose decisions file predates the
+    `memory_surfaces` key — fall back to the runtime's primary project
+    memory file, `<project>/CLAUDE.md`. Reads the YAML directly rather
+    than importing the installer so this module stays light for the
+    hook import path.
+    """
+    decisions_path = project_root / ".metaensemble" / "install-decisions.yaml"
+    if decisions_path.is_file():
+        try:
+            data = yaml.safe_load(decisions_path.read_text()) or {}
+        except (OSError, yaml.YAMLError):
+            data = {}
+        if isinstance(data, dict) and "memory_surfaces" in data:
+            raw = data.get("memory_surfaces") or []
+            paths: list[str] = []
+            if isinstance(raw, list):
+                for entry in raw:
+                    if not isinstance(entry, dict):
+                        continue
+                    surface_path = str(entry.get("path", "")).strip()
+                    if surface_path:
+                        paths.append(surface_path)
+            return paths
+    if (project_root / "CLAUDE.md").is_file():
+        return ["CLAUDE.md"]
+    return []
+
+
+def scaffold_manifest(task: str, *, project: Path | str | None = None) -> str:
+    """Render the starter Manifest YAML for `metaensemble manifest scaffold`.
+
+    The output deliberately fails schema validation until the author
+    replaces the `TODO:` markers. When the project's memory surfaces are
+    known (see `_memory_surface_paths`), `context.files` is pre-filled
+    with one `role: memory` entry per surface so the dispatch consumes
+    the memory files the runtime already loads instead of a rebuilt
+    context store; only the author-supplied TODO fields then keep the
+    scaffold from validating.
+    """
+    project_root = Path(project) if project is not None else Path.cwd()
+    # JSON is a YAML 1.2 subset for scalars, so `json.dumps` produces
+    # a fully-escaped double-quoted YAML scalar — safe for tasks with
+    # colons, hashes, quotes, or any other YAML metacharacter.
+    # Raw f-string interpolation would emit `task: ship: feature` for
+    # a task of `ship: feature`, which PyYAML rejects.
+    task_yaml = json.dumps(task)
+    memory_paths = _memory_surface_paths(project_root)
+    if memory_paths:
+        files_lines = [
+            "  files:  # pre-filled memory surfaces; add task-specific {path, lines?, role?} entries"
+        ]
+        for surface_path in memory_paths:
+            files_lines.append(f"    - path: {json.dumps(surface_path)}")
+            files_lines.append("      role: memory")
+        files_block = "\n".join(files_lines) + "\n"
+    else:
+        files_block = "  files: []  # TODO: at least one {path, lines?, role?} entry\n"
+    return (
+        f"manifest_id: hm-{uuid7()}\n"
+        f"version: 1\n"
+        f"task: {task_yaml}\n"
+        f"context:\n"
+        f"{files_block}"
+        f"expected_deliverables: []  # TODO: at least one {{path, must_export?, coverage?, schema?}}\n"
+        f"constraints:\n"
+        f"  model_tier: TODO  # opus | sonnet | haiku\n"
+        f"  window_budget: 0  # TODO: positive integer token budget\n"
+        f"acceptance:\n"
+        f"  - TODO: one acceptance criterion per line\n"
+    )
