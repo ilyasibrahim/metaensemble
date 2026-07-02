@@ -77,8 +77,10 @@ from metaensemble.lib.transcript import (  # noqa: E402
 
 
 def _quality_files_from_manifest(manifest_path: str | None) -> list[Path]:
-    """Return the list of Python files declared in the Manifest's
-    `expected_deliverables`. Empty list means the quality gate skips."""
+    """Return every file declared in the Manifest's `expected_deliverables`.
+    Relevance is decided per axis downstream: the Python runners filter to
+    .py internally, and configured axis commands fire on non-Python
+    deliverables. Empty list means the quality gate skips."""
     if not manifest_path:
         return []
     try:
@@ -89,7 +91,7 @@ def _quality_files_from_manifest(manifest_path: str | None) -> list[Path]:
     files: list[Path] = []
     for entry in manifest.get("expected_deliverables", []):
         path = entry.get("path")
-        if path and path.endswith(".py"):
+        if path:
             files.append(Path(path))
     return files
 
@@ -100,15 +102,20 @@ def _run_quality_gate(
     """Run the quality gate on a Run's expected deliverables.
 
     Returns `(quality_state, quality_findings_json, summary)` where each
-    is None when the gate does not run (no manifest, no Python files,
-    config load failure, etc.). The summary is the one-paragraph English
-    block the hook surfaces to the Coordinator on NOTIFY or BLOCK.
+    is None when the gate does not run (no manifest, no evaluable
+    deliverables, config load failure, etc.). The summary is the
+    one-paragraph English block the hook surfaces to the Coordinator on
+    NOTIFY or BLOCK.
     """
     files = _quality_files_from_manifest(manifest_path)
     if not files:
         return None, None, None
     try:
         config = load_quality_config()
+        if all(f.suffix != ".py" for f in files) and not config.axis_commands:
+            # Nothing the gate can evaluate: no Python deliverables for
+            # the built-in runners and no configured axis commands.
+            return None, None, None
         axes = run_all_axes(files, config, project_root)
         decision = build_decision(axes)
     except Exception as exc:

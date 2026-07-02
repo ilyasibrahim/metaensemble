@@ -7,6 +7,11 @@ absent axes rather than failing closed, so a user with a minimal install
 still gets the cost gate without being forced to install bandit, radon,
 and pip-audit just to dispatch a single Run.
 
+Non-Python deliverables are covered by `run_configured_command`: each
+axis can carry a user-configured command (quality.yaml `axis_commands`)
+whose exit code stands in for the Python tool, so a JS/TS dispatch is
+still checked across the same five axes.
+
 Each runner targets fast static analysis on the changed files only.
 The exception is correctness (pytest), which runs the full suite by
 default when Python deliverables are in scope. Projects with especially
@@ -22,12 +27,13 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
 import shutil
 import subprocess  # nosec B404
 import sys
 from pathlib import Path
 
-from metaensemble.lib.config import AxisConfig
+from metaensemble.lib.config import AxisCommand, AxisConfig
 from metaensemble.lib.cost_gate import GateState
 from metaensemble.lib.quality_gate import QualityAxis
 
@@ -340,6 +346,73 @@ def run_coverage(
     return QualityAxis(name="coverage", state=state, findings=findings, raw=percent)
 
 
+# --- Configured axis commands (non-Python deliverables) ---------------
+
+# Nonzero exit maps to the axis's configured escalation, never straight
+# to BLOCK by default: a failing user command is a signal, not a verdict.
+_STATE_ON_FAIL = {
+    "notify": GateState.NOTIFY,
+    "block": GateState.BLOCK,
+}
+
+_CMD_TAIL_LINES = 5
+_CMD_LINE_CHARS = 200
+
+
+def run_configured_command(
+    axis_name: str, command: AxisCommand, project_root: Path
+) -> QualityAxis:
+    """Run a user-configured axis command from the project root.
+
+    Exit 0 clears the axis; nonzero maps to the axis's `state_on_fail`
+    with the command and the tail of its output as findings. A missing
+    binary, an unparseable command, or a timeout skips the axis with a
+    reason — the same philosophy as the tool-absent Python runners: the
+    gate never invents confidence it does not have.
+
+    The command is shlex-split and run without a shell, so pipes and
+    `&&` chains belong in a script the command invokes.
+    """
+    name = f"{axis_name}:cmd"
+    try:
+        argv = shlex.split(command.cmd)
+    except ValueError as exc:
+        return _skipped(name, f"could not parse command {command.cmd!r}: {exc}")
+    if not argv:
+        return _skipped(name, "empty command")
+    if shutil.which(argv[0]) is None:
+        return _skipped(name, f"command not found: {argv[0]}")
+
+    try:
+        result = _run(argv, cwd=project_root, timeout=command.timeout)
+    except subprocess.TimeoutExpired:
+        return _skipped(
+            name, f"command timed out after {command.timeout}s: {command.cmd}"
+        )
+    except OSError as exc:
+        return _skipped(name, f"command failed to start: {exc}")
+
+    if result.returncode == 0:
+        return QualityAxis(
+            name=name,
+            state=GateState.AUTO,
+            findings=(f"`{command.cmd}` exited 0",),
+            raw=0.0,
+        )
+
+    state = _STATE_ON_FAIL.get(command.state_on_fail, GateState.NOTIFY)
+    findings = [f"`{command.cmd}` exited {result.returncode}"]
+    output = (result.stdout or "") + "\n" + (result.stderr or "")
+    tail = [ln.strip() for ln in output.splitlines() if ln.strip()]
+    findings.extend(ln[:_CMD_LINE_CHARS] for ln in tail[-_CMD_TAIL_LINES:])
+    return QualityAxis(
+        name=name,
+        state=state,
+        findings=tuple(findings),
+        raw=float(result.returncode),
+    )
+
+
 # --- Driver -----------------------------------------------------------
 
 def run_all_axes(
@@ -349,11 +422,25 @@ def run_all_axes(
 
     `config` is a `QualityConfig`. The function exists so tests and the
     hook can drive the gate without duplicating the per-axis dispatch.
+
+    The five Python runners always run (each skips itself when no .py
+    files are in scope). When the merged config carries `axis_commands`
+    AND the deliverable set includes non-Python files, the configured
+    command for each axis runs too, under the distinct name `<axis>:cmd`,
+    so a mixed .py + .ts dispatch records both verdicts and the existing
+    worst-of aggregation stands unchanged. Axis-command entries the
+    loader dropped surface here as skipped notes rather than vanishing.
     """
-    return (
+    axes: list[QualityAxis] = [
         run_correctness(files, config.correctness, project_root),
         run_security(files, config.security, project_root),
         run_maintainability(files, config.maintainability, project_root),
         run_complexity(files, config.complexity, project_root),
         run_coverage(files, config.coverage, project_root),
-    )
+    ]
+    if any(f.suffix != ".py" for f in files):
+        for axis_name, command in config.axis_commands.items():
+            axes.append(run_configured_command(axis_name, command, project_root))
+        for axis_name, reason in config.ignored_axis_commands:
+            axes.append(_skipped(f"{axis_name}:cmd", reason))
+    return tuple(axes)

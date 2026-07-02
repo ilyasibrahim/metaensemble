@@ -51,3 +51,32 @@ coverage:
   notify_drop_pp: 5.0           # 5 percentage-point drop vs baseline → NOTIFY
   block_drop_pp: 5.0            # 5pp drop → BLOCK
   block_absolute_below: 80.0    # coverage below 80% → BLOCK regardless of delta
+
+# Axis commands — generalize the gate beyond Python. Each axis can carry
+# a command that runs from the project root whenever a dispatch produces
+# non-Python deliverables, so a JS/TS (or Go, Rust, ...) Deliverable is
+# still checked across the same five axes. Only the exit code is
+# interpreted: exit 0 → AUTO; nonzero → the axis's `state_on_fail`
+# ("notify" by default, or "block"). A command that is not installed or
+# times out skips its axis with a reason — the gate never guesses.
+#
+# Commands run alongside the Python runners: a mixed .py + .ts dispatch
+# records both "correctness" (pytest) and "correctness:cmd" (your
+# command), and the worst state across all axes still decides the gate.
+# Commands are shlex-split and run without a shell — put pipes or `&&`
+# chains in a script and point `cmd` at it.
+#
+# axis_commands:
+#   correctness:
+#     cmd: "npm test --silent"
+#     timeout: 180              # seconds; default 120
+#     state_on_fail: block      # failing tests should stop the line
+#   security:
+#     cmd: "npm audit --audit-level=high"
+#   maintainability:
+#     cmd: "npx eslint ."
+#     state_on_fail: notify     # the default; shown for completeness
+#   complexity:
+#     cmd: "npx eslint . --rule '{\"complexity\": [\"error\", 15]}'"
+#   coverage:
+#     cmd: "npx vitest run --coverage"

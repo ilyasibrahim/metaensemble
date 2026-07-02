@@ -280,6 +280,35 @@ class AxisConfig:
         return self.options.get(key, default)
 
 
+# Canonical axis names, in gate order. `axis_commands` entries must use one
+# of these; anything else is ignored (with a skipped-style note) rather than
+# crashing a hook on user config.
+_QUALITY_AXIS_NAMES = (
+    "correctness",
+    "security",
+    "maintainability",
+    "complexity",
+    "coverage",
+)
+
+_DEFAULT_AXIS_COMMAND_TIMEOUT = 120  # seconds; test suites can be slow
+
+
+@dataclass(frozen=True)
+class AxisCommand:
+    """A user-configured command standing in for an axis's Python tool.
+
+    Runs from the project root when a dispatch produces non-Python
+    deliverables, so the five-axis gate generalizes beyond the built-in
+    pytest/bandit/ruff/radon/coverage runners. Only the exit code is
+    interpreted: 0 clears the axis, nonzero maps to `state_on_fail`.
+    """
+
+    cmd: str
+    timeout: int = _DEFAULT_AXIS_COMMAND_TIMEOUT
+    state_on_fail: str = "notify"  # "notify" | "block"
+
+
 @dataclass(frozen=True)
 class QualityConfig:
     """Quality-gate configuration. See `metaensemble/lib/quality_gate.py`.
@@ -288,6 +317,12 @@ class QualityConfig:
     configurable. A user-level `~/.metaensemble/quality.yaml` is merged
     with a project-level `<project>/.metaensemble/quality.yaml`. Anything
     not set falls through to the industry-anchored defaults above.
+
+    `axis_commands` maps axis names to user-configured commands that run
+    on non-Python deliverables; `ignored_axis_commands` records the
+    `(name, reason)` pairs the loader dropped (unknown axis, unusable
+    entry) so the gate can surface them as skipped notes instead of
+    silently swallowing a config typo.
     """
 
     correctness: AxisConfig
@@ -295,6 +330,52 @@ class QualityConfig:
     maintainability: AxisConfig
     complexity: AxisConfig
     coverage: AxisConfig
+    axis_commands: dict[str, AxisCommand] = field(default_factory=dict)
+    ignored_axis_commands: tuple[tuple[str, str], ...] = ()
+
+
+def _parse_axis_commands(
+    raw: Any,
+) -> tuple[dict[str, AxisCommand], tuple[tuple[str, str], ...]]:
+    """Parse the merged `axis_commands` block, tolerating any user input.
+
+    Returns `(commands, ignored)` where `commands` is keyed by canonical
+    axis name in gate order and `ignored` holds `(name, reason)` pairs for
+    entries the loader dropped. Never raises: this runs inside hooks, and
+    a malformed quality.yaml must not fail a PostToolUse.
+    """
+    if raw is None:
+        return {}, ()
+    if not isinstance(raw, dict):
+        return {}, (("axis_commands", "axis_commands must be a mapping; ignored"),)
+
+    parsed: dict[str, AxisCommand] = {}
+    ignored: list[tuple[str, str]] = []
+    for name, entry in raw.items():
+        key = str(name)
+        if key not in _QUALITY_AXIS_NAMES:
+            ignored.append((key, f"unknown axis {key!r} in axis_commands; ignored"))
+            continue
+        if isinstance(entry, str):
+            entry = {"cmd": entry}
+        if not isinstance(entry, dict) or not str(entry.get("cmd") or "").strip():
+            ignored.append((key, f"axis_commands.{key} has no usable cmd; ignored"))
+            continue
+        state_on_fail = str(entry.get("state_on_fail", "notify")).strip().lower()
+        if state_on_fail not in ("notify", "block"):
+            state_on_fail = "notify"
+        try:
+            timeout = int(entry.get("timeout", _DEFAULT_AXIS_COMMAND_TIMEOUT))
+        except (TypeError, ValueError):
+            timeout = _DEFAULT_AXIS_COMMAND_TIMEOUT
+        parsed[key] = AxisCommand(
+            cmd=str(entry["cmd"]).strip(),
+            timeout=max(1, timeout),
+            state_on_fail=state_on_fail,
+        )
+
+    ordered = {n: parsed[n] for n in _QUALITY_AXIS_NAMES if n in parsed}
+    return ordered, tuple(ignored)
 
 
 def load_quality_config(
@@ -318,10 +399,16 @@ def load_quality_config(
             options={k: v for k, v in values.items() if k != "enabled"},
         )
 
+    axis_commands, ignored_axis_commands = _parse_axis_commands(
+        merged.get("axis_commands")
+    )
+
     return QualityConfig(
         correctness=_axis("correctness"),
         security=_axis("security"),
         maintainability=_axis("maintainability"),
         complexity=_axis("complexity"),
         coverage=_axis("coverage"),
+        axis_commands=axis_commands,
+        ignored_axis_commands=ignored_axis_commands,
     )
