@@ -1,0 +1,35 @@
+name: Feature request
+description: Propose an extension to one of the primitives or a new capability
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The coordination problem
+      description: What breaks or costs too much today, in concrete terms — tokens, re-derived context, missed reviews, invisible spend.
+    validations:
+      required: true
+  - type: dropdown
+    id: primitive
+    attributes:
+      label: Which primitive does this extend?
+      description: MetaEnsemble grows by deepening its primitives, not by adding side systems.
+      options:
+        - Role / Executor (identity)
+        - Manifest / Brief (typed handoffs)
+        - Ledger (institutional memory)
+        - Cost gate (escalation)
+        - Quality gate (accountable review)
+        - Dispatch patterns (fan-out, consensus, shadow, peer review)
+        - Installer / adoption
+        - Eval harness
+        - New primitive (explain why the existing five cannot absorb it)
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: What the Principal sees, what the Ledger records, and what a test would assert.
+    validations:
+      required: true

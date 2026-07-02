@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security report
+    url: https://github.com/ilyasibrahim/metaensemble/blob/main/SECURITY.md
+    about: Do not open public issues for vulnerabilities — follow the SECURITY.md process.
+  - name: System card (known limitations)
+    url: https://github.com/ilyasibrahim/metaensemble/blob/main/docs/SYSTEM-CARD.md
+    about: Check the documented limitations before filing — the gap may already be named there.

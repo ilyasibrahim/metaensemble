@@ -1,0 +1,51 @@
+name: Bug report
+description: Something behaves differently from what the docs or the article promise
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected, what you got instead.
+      placeholder: Dispatched with --fanout 3; only one Run appears in /ledger recent.
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: metaensemble doctor output
+      description: Run `metaensemble doctor` from the affected project and paste the output.
+      render: text
+    validations:
+      required: false
+  - type: textarea
+    id: hook-log
+    attributes:
+      label: Hook error log excerpt
+      description: "Relevant lines from `<project>/.metaensemble/hooks/log.jsonl`, if any."
+      render: json
+    validations:
+      required: false
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: MetaEnsemble version, Python version, OS, and Claude Code version.
+      placeholder: metaensemble 0.1.0 · Python 3.12 · macOS 15 · Claude Code 2.x
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Affected surface
+      options:
+        - Installer / adopt / unadopt
+        - Hooks (recording, gates, reconcile)
+        - Ledger / queries / slash commands
+        - Manifests / Briefs / schemas
+        - Quality gate
+        - Eval harness
+        - Docs
+        - Other
+    validations:
+      required: true
