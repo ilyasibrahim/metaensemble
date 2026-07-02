@@ -210,6 +210,19 @@ Performance commitments matter only if regressions are visible to the Principal.
 
 If `/perf` shows hook latency p95 above the budget for an extended period, the Principal sees the warning before the next workflow is dispatched. The system reports its own degradation rather than waiting for the Principal to notice through symptoms.
 
+### 5.1 Ledger growth over a project's life
+
+The Ledger grows linearly with Run count, and the constant is small. Measured on schema 001–003 with fully populated rows (provenance, tool-use counts, quality findings, cache-token fields — the worst realistic case):
+
+| Runs | SQLite | JSONL mirror | Total |
+|---|---|---|---|
+| 500 | 352 KiB | 474 KiB | 0.81 MiB |
+| 1,000 | 616 KiB | 948 KiB | 1.53 MiB |
+
+That is roughly **1.6 KiB per Run**, with the JSONL mirror accounting for ~60% of it (the mirror trades bytes for replayability; see ARCHITECTURE on the two-layer Ledger). Projected forward: a project that dispatches 50 Runs a day for a working year lands near 20 MiB — well inside what a single SQLite writer sustains. The number to watch is not disk but writer concurrency, covered in §6: if parallel Executors ever contend on writes, the data layer is rethought before the file size matters.
+
+Briefs and Deliverables are files on disk outside the Ledger and dominate total footprint on prose-heavy projects; the Ledger stores paths to them, not their content.
+
 ---
 
 ## 6. Honest caveats

@@ -203,6 +203,8 @@ Nine checks the user runs after install (or whenever something feels off). `C1` 
 
 The user's editable choice surface for per-agent and per-Role handling. Every agent the inspection finds gets one entry — `name`, `kind` (one of `collision`, `user_unique`, `curated_relevant`, `curated_optional`), `action` (one of seven actions scoped by kind), and a `recommendation` comment. The installer reads this file and honors every choice. Nothing the user authored is silently converted; the default for every collision is to keep the user's agent.
 
+The file also records the project's `report_root` and its **memory surfaces** — the runtime memory files detected at adoption (`CLAUDE.md`, `.claude/CLAUDE.md`, `CLAUDE.local.md`), each as `{path, scope: project}`. Manifest scaffolds pre-fill `context.files` with one `{path, role: memory}` pointer per surface, so Executors are handed the project's existing memory rather than re-discovering it (or MetaEnsemble rebuilding a memory store alongside the runtime's).
+
 ### Agent shim
 **Shape:** Markdown file at `~/.claude/agents/<name>.md` left by the installer.
 **Analog:** Linker stub, façade pattern.
@@ -219,7 +221,7 @@ Invocation path for the `metaensemble` CLI from hooks and slash commands. Pins o
 **Shape:** JSON file at `<project>/.metaensemble/state/blocks/<session>-<ts>.json`.
 **Analog:** Outbox pattern, sidecar file.
 
-Persisted record of a cost-gate BLOCK decision. Carries `reason`, `estimated_tokens`, `estimated_pct_of_window`, `manifest_id`, `state` (`block`), the three structured options (`approve at current tier`, `drop tier and retry`, `split into smaller Manifests`), and `default: paused`. The Coordinator reads the most recent sentinel after a blocked dispatch and surfaces the options to the Principal — the runtime's "hook error" rendering does not pass the structured options through, so the sentinel is the recovery path. v0.2 will surface the options directly in `systemMessage`.
+Persisted record of a cost-gate BLOCK decision. Carries `reason`, `estimated_tokens`, `estimated_pct_of_window`, `manifest_id`, `state` (`block`), the four structured options (`approve at current tier`, `drop tier and retry`, `split into smaller Manifests`, `send the Manifest back for revision`), and `default: paused`. The primary delivery channel is the runtime's native permission surface — the block emits `hookSpecificOutput.permissionDecision: "deny"` with the full decision surface as the reason, so the options reach the Coordinator inline. The sentinel remains the machine-readable record and the recovery path when a runtime's denial rendering loses the text.
 
 ### NOTIFY sentinel
 **Shape:** JSON file at `<project>/.metaensemble/state/notifies/<session>-<ts>.json`.
@@ -231,7 +233,7 @@ Persisted record of a cost-gate NOTIFY decision. Same fields as the BLOCK sentin
 **Shape:** PostToolUse evaluation in `metaensemble/hooks/post_task.py`, backed by `metaensemble/lib/quality_gate.py` and `metaensemble/lib/quality_runners.py`.
 **Analog:** SonarQube quality gate, Snyk PR check, GitHub Advanced Security branch ruleset.
 
-Five-axis Python check that runs after a successful Run whose Manifest declared Python deliverables. The implementation module is still named `quality_gate` for compatibility, but the v0.1.0 product scope is intentionally narrower than a universal quality gate. Axes: *correctness* (pytest), *security* (bandit), *maintainability* (ruff issue count mapped to SonarQube A–E), *complexity* (radon McCabe), *coverage* (coverage.py absolute floor). Worst axis sets the state; on NOTIFY or BLOCK the Coordinator surfaces a four-option Principal surface (`accept`, `peer review`, `re-dispatch with stricter`, `split`). Thresholds anchor to industry-standard sources documented in `metaensemble/config/quality.example.yaml`. Each runner skips gracefully when its underlying tool is not installed, so the check degrades to a partial check rather than failing closed.
+Five-axis check that runs after a successful Run whose Manifest declared deliverables. For Python deliverables the built-in runners apply: *correctness* (pytest), *security* (bandit), *maintainability* (ruff issue count mapped to SonarQube A–E), *complexity* (radon McCabe), *coverage* (coverage.py absolute floor). For non-Python deliverables the same five axes run through project-configured commands (`axis_commands` in `quality.yaml`, e.g. `npm test` for correctness), each reported under a distinct `<axis>:cmd` name; a mixed deliverable set records both verdicts. Worst axis sets the state; on NOTIFY or BLOCK the Coordinator surfaces a four-option Principal surface (`accept`, `peer review`, `re-dispatch with stricter`, `split`). Thresholds anchor to industry-standard sources documented in `metaensemble/config/quality.example.yaml`. Each runner skips gracefully when its underlying tool is not installed or no command is configured for an axis, so the check degrades to a partial check rather than failing closed.
 
 ### Extras (Manifest)
 **Shape:** Open-shape `extras: {}` map at the top level of a Manifest.

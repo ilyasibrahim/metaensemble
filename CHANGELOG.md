@@ -11,6 +11,12 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+**Deliverable check beyond Python.** `quality.yaml` gains an optional `axis_commands` block: one project-configured command per axis (correctness, security, maintainability, complexity, coverage) runs when a Manifest declares non-Python deliverables, each reported under a distinct `<axis>:cmd` name with `state_on_fail: notify|block` semantics. Commands run shell-less from the project root; a missing binary, unparseable command, or timeout skips the axis rather than inventing confidence. Pure-Python deliverable sets keep the built-in runners unchanged, and a Run with no `.py` deliverables and no configured commands is not evaluated, exactly as before.
+
+**Memory-surface consumption.** Adoption now detects the project's runtime memory files (`CLAUDE.md`, `.claude/CLAUDE.md`, `CLAUDE.local.md`) and records them as `memory_surfaces` in `install-decisions.yaml`. `metaensemble manifest scaffold` pre-fills `context.files` with one `{path, role: memory}` pointer per surface, so Executors are handed the project's existing memory instead of re-deriving it.
+
+**Fourth cost-gate option.** NOTIFY and BLOCK surfaces, and their persisted sentinels, now offer "Send the Manifest back for revision" alongside approve / drop tier / split.
+
 **Background and fan-out dispatch lifecycle.** A `SubagentStop` hook (`subagent_stop.py`) finalizes background-dispatched Runs, correlated strictly by the runtime `agentId` so concurrent and fan-out dispatches in one session finalize independently. `post_task.py` now detects the Agent tool's launch stub, reconciles it to the pre-task sidecar by `tool_use_id`, records an `agentId`-keyed active-dispatch marker so the subagent's file writes stay authorized, and defers finalization to `SubagentStop`. Synchronous and background dispatches share one `finalize_pending` path, so both produce identical Run records.
 
 **Configurable report location.** `install-decisions.yaml` gains a `report_root` field. Greenfield projects default to the machine-local, ignored `.metaensemble/reports`; existing projects keep a detected convention such as `.claude/reports`. The Coordinator writes a synthesis report file only when the Manifest explicitly declares it, synthesizing in the Principal-facing response otherwise.
@@ -23,7 +29,13 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 **CI on Python 3.10.** `test_cli.py` imported `tomllib` unconditionally; the module is stdlib only on Python 3.11+, so the 3.10 CI job failed at collection and cancelled the matrix. The test now falls back to the `tomli` backport, declared in the `[test]` extras for `python_version < '3.11'`.
 
+**Reconcile quarantines sidecars it cannot record.** A pending sidecar whose Ledger insert raises (for example a foreign-key failure against pruned parent rows) was logged and retried on every future session start, forever. It now moves to `<state>/pending/quarantine/<run_id>.json` and logs `reconcile-sidecar-quarantined` with the destination path; `reconcile-sidecar-failed` appears only if the quarantine move itself fails.
+
+**The test suite no longer leaks into real state.** Running pytest appended fixture-run reconcile errors to the ambient project's `.metaensemble/hooks/log.jsonl` and left test markers in the real `~/.metaensemble/state/active-dispatches/`. An autouse fixture now isolates `HOME`/`USERPROFILE` and the hook error log per test; a full-suite run leaves both surfaces byte-identical.
+
 ### Changed
+
+**Blocks ride the native permission surface.** A blocked dispatch (cost gate, Manifest validation failure, or the fan-out/consensus guard) now emits `hookSpecificOutput.permissionDecision: "deny"` with the full decision surface as the reason, plus the legacy `decision: "block"`/`reason` pair — on exit 0, since the runtime ignores stdout JSON on non-zero exits. Under the old exit-2 contract the structured reason never reached the model and the sentinel file was the only recovery path; the denial reason now arrives inline, and the sentinel remains the machine-readable record.
 
 **Session digest.** The Stop digest now reports "Outputs recorded" (real on-disk artifacts, rel/abs duplicates collapsed) rather than "Deliverables produced".
 

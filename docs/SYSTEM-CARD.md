@@ -32,8 +32,10 @@ Concrete use cases the v0.1.0 release supports:
   each multi-Executor mode.
 - Local cost gating via threshold-based decisions surfaced as
   structured options.
-- Python deliverable checks for successful Runs whose Manifest declares
-  `.py` outputs and whose local toolchain is installed.
+- Deliverable checks for successful Runs: built-in five-axis Python
+  runners for `.py` outputs (when the local toolchain is installed), and
+  the same five axes via project-configured `axis_commands` in
+  `quality.yaml` for non-Python outputs.
 
 ## Intended *not*-use
 
@@ -181,15 +183,16 @@ fixtures and baseline cells are present in the run.
   add file-locking around the pending-sidecar directory; v0.1.0 does
   not.
 - **Local storage**: The Ledger is SQLite + a JSONL mirror under
-  `<project>/.metaensemble/state/`. Median Ledger size after 1000
-  Runs is approximately 1-2 MB.
+  `<project>/.metaensemble/state/`. Measured size after 1,000 fully
+  populated Runs is approximately 1.5 MB, growing linearly at ~1.6 KiB
+  per Run (PERFORMANCE.md §5.1).
 
 ## Risks
 
 | Risk | Mitigation |
 |---|---|
 | The Principal misreads an uncalibrated model label as authoritative. | This system card and the failure-mode catalog name the limitation. Domain-specific confidence claims require an independently labeled calibration set. |
-| Stale pending sidecars accumulate after a crash. | Two-layer reconcile + on-demand CLI catch them. The session-start sweep runs every session. |
+| Stale pending sidecars accumulate after a crash. | Two-layer reconcile + on-demand CLI catch them. The session-start sweep runs every session; a sidecar that repeatedly fails to record is quarantined under `pending/quarantine/` instead of retrying forever. |
 | Python quality runners are absent in the Principal's environment. | The runners degrade to "tool not installed" findings rather than failing closed. The default install profile `[test]` includes them. |
 | Schema migrations conflict with a third-party tool reading the SQLite file directly. | The 001/002/003 migrations are documented; new migrations bump the additive backfill list, not the table shape, when possible. |
 

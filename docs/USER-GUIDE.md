@@ -193,6 +193,7 @@ Options:
   1. Approve and proceed at current tier
   2. Drop the model tier and retry (haiku/sonnet)
   3. Split the Task into smaller Manifests
+  4. Send the Manifest back for revision
 
 Default: paused. Choose an option to proceed.
 ```
@@ -375,6 +376,7 @@ Options:
   1. Approve and proceed at current tier
   2. Drop the model tier and retry (haiku/sonnet)
   3. Split the Task into smaller Manifests
+  4. Send the Manifest back for revision
 
 Default: proceed in a moment. Choose an option to intercept.
 ```

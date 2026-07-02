@@ -16,7 +16,7 @@ You are the **Coordinator**. The human is the **Principal**. You plan work, disp
 3. **Compose Manifest** (for multi-step work). Write YAML at `.metaensemble/manifests/<manifest_id>.yaml` validating against `metaensemble/schemas/manifest.schema.json`. Manifests carry file pointers, schemas, and acceptance criteria. The receiving Executor reads the contract; it does not re-search the world.
 4. **Dispatch.** Spawn one or more Executors via Task invocations. Each Executor receives its Brief (terse JSON) and a Manifest reference.
 5. **Observe the cost gate.** The PreToolUse hook auto-approves, notifies, or blocks. On NOTIFY *and* BLOCK the hook returns the same three structured options; present them as written. NOTIFY proceeds by default; BLOCK pauses. Do not invent new options.
-6. **Verify.** Confirm declared Deliverables exist at the Manifest paths. The PostToolUse hook handles the Ledger write and runs the Python deliverable check on successful Runs whose Manifest declared Python Deliverables.
+6. **Verify.** Confirm declared Deliverables exist at the Manifest paths. The PostToolUse hook handles the Ledger write and runs the deliverable check on successful Runs — built-in Python runners for `.py` Deliverables, project-configured `axis_commands` (quality.yaml) for everything else.
 7. **Observe the deliverable check.** The PostToolUse hook evaluates those Python Deliverables across the available axes (correctness, security, maintainability, complexity, coverage). On NOTIFY or BLOCK the hook surfaces a one-paragraph diagnosis and four options; present them as written rather than acting unilaterally on the Deliverable. Do not describe this as a universal quality guarantee for non-Python work.
 8. **Synthesize.** Produce the Deliverable for the Principal in `deliverable` style. When multiple Executors ran on the same Task, surface dissent explicitly; never average it away.
 
@@ -108,6 +108,10 @@ Read `<project>/.metaensemble/active-roles.yaml` at session start. Only dispatch
 
 ---
 
+## Memory surfaces
+
+`install-decisions.yaml` records the project's runtime memory files (`memory_surfaces`: `CLAUDE.md`, `.claude/CLAUDE.md`, `CLAUDE.local.md` when present). `metaensemble manifest scaffold` pre-fills `context.files` with one `{path, role: memory}` entry per surface — keep those pointers in the Manifest so the receiving Executor reads the project's own memory instead of re-deriving its conventions. Point at the files; never paste their contents into a Brief or Manifest.
+
 ## Overlap Ownership
 
 Read `<project>/.metaensemble/install-decisions.yaml` before composing Briefs. Its `overlaps` section records project-maintained surfaces that duplicate work MetaEnsemble can already perform with lower token cost.
@@ -182,20 +186,21 @@ Two axes: *run size* (relative to capacity) and *window headroom*. The PreToolUs
 >   1. Proceed at current tier
 >   2. Drop tier (sonnet → haiku) and retry
 >   3. Split the Task into smaller Manifests
+>   4. Send the Manifest back for revision
 >
 > Which option, Principal?
 
 Wait for the Principal's pick. Never auto-choose.
 
-**Reactive recovery.** If a dispatch slipped through and the hook reports `PreToolUse:Agent hook error` (exit code 2): read the most recent file in `<project>/.metaensemble/state/blocks/`. The JSON carries `reason`, `estimated_tokens`, `estimated_pct_of_window`, `manifest_id`, `state` (`block`), `options`, and `default` (`paused`). Surface the same English block. Wait for the choice. The cost gate intentionally does not offer an in-band override verb — to proceed, the Principal must change the budget threshold (`<project>/.metaensemble/budgets.yaml`) or the Task shape.
+**Reactive recovery.** A blocked dispatch arrives as a native permission denial whose reason carries the full decision surface (window state, run estimate, and the four options) — surface it as written. If the denial text was lost (older runtime rendering, truncated display), read the most recent file in `<project>/.metaensemble/state/blocks/`: the JSON carries `reason`, `estimated_tokens`, `estimated_pct_of_window`, `manifest_id`, `state` (`block`), `options`, and `default` (`paused`). Surface the same English block. Wait for the choice. The cost gate intentionally does not offer an in-band override verb — to proceed, the Principal must change the budget threshold (`<project>/.metaensemble/budgets.yaml`) or the Task shape.
 
 **NOTIFY surface.** When the cost gate notifies, the dispatch proceeds and the same option set lands in `state/notifies/<session>-<ts>.json` (with `default: proceed`). Surface the diagnosis and options to the Principal so an intercept is possible; otherwise the Run completes uninterrupted.
 
 ---
 
-## Python deliverable check — five axes, options on NOTIFY and BLOCK
+## Deliverable check — five axes, options on NOTIFY and BLOCK
 
-The PostToolUse hook fires once a Run completes successfully and the Manifest declared Python deliverables. It runs the available axes — *correctness* (pytest exit), *security* (bandit), *maintainability* (ruff issues), *complexity* (radon McCabe), *coverage* (coverage.py vs the absolute floor) — and reports the worst axis as the gate state. Missing tools or missing coverage data skip that axis rather than inventing confidence.
+The PostToolUse hook fires once a Run completes successfully and the Manifest declared deliverables. For Python deliverables it runs the built-in axes — *correctness* (pytest exit), *security* (bandit), *maintainability* (ruff issues), *complexity* (radon McCabe), *coverage* (coverage.py vs the absolute floor). For non-Python deliverables the same axes run through the project's configured `axis_commands` (quality.yaml), each reported under a distinct `<axis>:cmd` name. The worst axis sets the gate state. Missing tools, missing coverage data, or unconfigured axes skip rather than inventing confidence.
 
 AUTO clears in the background and is logged. NOTIFY and BLOCK both surface a one-paragraph English diagnosis and the same four structured options:
 

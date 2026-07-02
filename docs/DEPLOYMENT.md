@@ -8,7 +8,7 @@
 
 Deployment runs in two phases, and the split is the load-bearing safety property of the installer.
 
-**Phase 1 — inspect (read-only).** `metaensemble inspect` examines the user's `~/.claude/` and the project's `.claude/` directories, takes inventory of the agents, slash commands, skills, and output styles found there, and produces two files: a short Markdown report at `<project>/.metaensemble/inspection-<timestamp>.md`, and an editable `<project>/.metaensemble/install-decisions.yaml`. The decisions file is the user's choice surface: every agent and every curated Role gets one entry with a sensible default. No filesystem changes happen during inspection beyond writing these two files in the project's `.metaensemble/`.
+**Phase 1 — inspect (read-only).** `metaensemble inspect` examines the user's `~/.claude/` and the project's `.claude/` directories, takes inventory of the agents, slash commands, skills, and output styles found there, and produces two files: a short Markdown report at `<project>/.metaensemble/inspection-<timestamp>.md`, and an editable `<project>/.metaensemble/install-decisions.yaml`. The decisions file is the user's choice surface: every agent and every curated Role gets one entry with a sensible default, and the inspection also records the project's `report_root` and its runtime memory surfaces (`CLAUDE.md`, `.claude/CLAUDE.md`, `CLAUDE.local.md` when present) so Manifests can hand Executors typed pointers to the project's existing memory. No filesystem changes happen during inspection beyond writing these two files in the project's `.metaensemble/`.
 
 **Phase 2 — install (filesystem changes, fully reversible).** Installation has two layers, installed by two commands. `metaensemble user-setup --layout={namespaced|top-level}` installs the user-level integration once per machine (commands, hooks, statusline, and the vendored runtime at `~/.metaensemble/runtime/` with its runner at `runtime/bin/me-run`; layout controls whether slash commands install namespaced or top-level). `metaensemble adopt` reads the project's `install-decisions.yaml`, plans the per-project actions, optionally previews them with `--dry-run`, and applies them. Every project change is backed up to `<project>/.metaensemble/backups/<timestamp>/` and reversible via `metaensemble unadopt`; every user-level change is backed up to `~/.metaensemble/installs/<timestamp>/` and reversible via `metaensemble user-teardown`. The install also adds `.metaensemble/` to the project's root `.gitignore` (creating the file if absent) so the per-project working directory stays out of git, the same way `.venv` and `node_modules` do. An existing `.gitignore` is appended to, never overwritten, and the operation is idempotent.
 
@@ -141,13 +141,51 @@ The gate skips any axis whose tool is not installed, so a partial install
 degrades the check rather than blocking PostToolUse. Project overrides
 live in `<project>/.metaensemble/quality.yaml`; the shipped example file
 at `metaensemble/config/quality.example.yaml` documents the defaults and the
-industry sources they anchor on.
+industry sources they anchor on. Non-Python deliverables are checked
+across the same five axes through the optional `axis_commands` block in
+the same file — one command per axis (for example `npm test --silent` as
+the correctness command), no extra install required.
 
 To change the active set after install, edit
 `<project>/.metaensemble/install-decisions.yaml` (flip the per-Role
 `action` between `activate` and `retire`) and re-run `metaensemble
 adopt`. Inactive Roles remain available in `metaensemble/roles/` and
 can be reactivated later without reinstalling.
+
+---
+
+## Requirements and operating constraints
+
+What to plan around before adopting a project. SYSTEM-CARD.md remains the
+authoritative statement of capabilities and limitations; this section is the
+deployment-facing summary.
+
+**Python and platform.** Python 3.10–3.13 (the CI matrix). Runtime
+dependencies are `jsonschema` and `pyyaml` only; the quality runners are the
+optional `[quality]` extras above. Tested on macOS and Linux; Windows is not
+currently exercised.
+
+**Claude Code hook events.** The full lifecycle needs `SessionStart`,
+`PreToolUse`, `PostToolUse`, `SubagentStop`, and `Stop`. Older runtimes
+degrade rather than break: without `Stop`, Layer-1 reconciliation is lost and
+`metaensemble reconcile` is the workaround; without `SubagentStop`,
+background-dispatched Runs are recovered by the reconcile sweep instead of
+finalizing at subagent stop.
+
+**Concurrency.** One runtime per project. The Ledger is a single-writer
+SQLite database; concurrent multi-runtime use against the same project is not
+supported in v0.1.0.
+
+**Storage.** Measured Ledger growth is ~1.6 KiB per Run — about 1.5 MiB
+after 1,000 fully populated Runs (see PERFORMANCE.md §5.1). Briefs and
+Deliverables are separate files and dominate footprint on prose-heavy
+projects.
+
+**iCloud-synced paths.** Host active projects outside iCloud-synced
+directories, or exclude them from sync. iCloud's dataless-placeholder state
+can make SQLite `open()` fail intermittently, surfacing as `Agent hook error`
+with no stderr; `metaensemble doctor` C4 and C11 name this cause when
+detected.
 
 ---
 
