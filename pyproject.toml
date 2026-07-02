@@ -29,6 +29,7 @@ test = [
   "radon>=6.0",       # complexity — cyclomatic per function (local)
   "coverage>=7.0",    # coverage delta — line-coverage report (local)
   "build>=1.0",       # wheel build — used by test_wheel_smoke
+  "tomli>=2.0; python_version < '3.11'",  # tomllib backport — used by test_cli
 ]
 
 # `[quality]` is the production runtime profile for the quality gate.

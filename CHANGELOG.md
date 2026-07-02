@@ -21,6 +21,8 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 **Provenance no longer records phantom outputs.** A file is recorded as touched only when its Write tool result exists and did not error, and only when the path exists on disk at finalization; denied writes and paths parsed from prose are excluded and logged. Active-dispatch markers for a finalized Run are cleared across both the session and `agentId` indexes, so a completed Run can never keep a write authorized.
 
+**CI on Python 3.10.** `test_cli.py` imported `tomllib` unconditionally; the module is stdlib only on Python 3.11+, so the 3.10 CI job failed at collection and cancelled the matrix. The test now falls back to the `tomli` backport, declared in the `[test]` extras for `python_version < '3.11'`.
+
 ### Changed
 
 **Session digest.** The Stop digest now reports "Outputs recorded" (real on-disk artifacts, rel/abs duplicates collapsed) rather than "Deliverables produced".

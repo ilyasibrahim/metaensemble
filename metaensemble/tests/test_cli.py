@@ -14,7 +14,10 @@ REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
 def test_package_version_matches_pyproject():
-    import tomllib
+    try:
+        import tomllib  # Python 3.11+
+    except ModuleNotFoundError:
+        import tomli as tomllib  # Python 3.10: tomli backport from [test] extras
     import metaensemble
 
     pyproject = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text())
