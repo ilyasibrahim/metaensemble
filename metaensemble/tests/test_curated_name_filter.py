@@ -12,9 +12,7 @@ section.
 """
 from __future__ import annotations
 
-from pathlib import Path
 
-import pytest
 
 from metaensemble.lib.installer import (
     _is_canonical_curated_name,

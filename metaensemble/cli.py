@@ -17,7 +17,7 @@ from pathlib import Path
 
 CORE_DIR = Path(__file__).resolve().parent
 EXPERIMENTAL_NOTICE = (
-    "MetaEnsemble v0.1.0 is feedback-first software. It records and gates "
+    "MetaEnsemble v0.2.0 is feedback-first software. It records and gates "
     "local agent work, but its quality-per-token claims are not yet "
     "calibrated empirical guarantees; see docs/SYSTEM-CARD.md."
 )
@@ -53,8 +53,8 @@ def cmd_init(args: argparse.Namespace) -> int:
     print(f"\n{EXPERIMENTAL_NOTICE}")
 
     if args.pack:
-        # Starter packs are planned for v0.2.0; surface what is available now.
-        print(f"\nNote: starter pack '{args.pack}' is reserved for v0.2.0. Core ships seven base Roles.")
+        # Starter packs are planned for a future release; surface what is available now.
+        print(f"\nNote: starter pack '{args.pack}' is reserved for a future release. Core ships seven base Roles.")
         print(f"  Curated Roles available at: {CORE_DIR / 'roles'}/")
     return 0
 
@@ -538,7 +538,7 @@ def _render_adopt_dry_run(
     lines.extend([
         f"- Would {state_verb} project state under: `{project / '.metaensemble'}`",
         f"- Would ensure Ledger DB exists: `{project / '.metaensemble' / 'state' / 'department.db'}`",
-        f"- Would ensure root `.gitignore` ignores: `.metaensemble/`",
+        "- Would ensure root `.gitignore` ignores: `.metaensemble/`",
         f"- Would write active roles: `{project / '.metaensemble' / 'active-roles.yaml'}`",
         "",
         "## Per-agent install actions",
@@ -583,7 +583,7 @@ def _print_action_report(
     for action in noop:
         target = f" -> {action.target}" if action.target else ""
         print(f"  - SKIP {action.kind}{target}")
-        print(f"        already in desired state")
+        print("        already in desired state")
     for action, msg in errors:
         target = f" -> {action.target}" if action.target else ""
         print(f"  - FAIL {action.kind}{target}", file=sys.stderr)
@@ -945,7 +945,7 @@ def cmd_eval(args: argparse.Namespace) -> int:
         )
         if (cassette_dir / "bootstrap.jsonl").exists():
             report.notes.append(
-                "v0.1.0 bootstrap cassettes verify replay mechanics only; "
+                "The bootstrap cassettes verify replay mechanics only; "
                 "they are not empirical benchmark evidence."
             )
     else:
@@ -1084,7 +1084,7 @@ def main(argv: list[str] | None = None) -> int:
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     p_init = sub.add_parser("init", help="Initialize MetaEnsemble in the current project")
-    p_init.add_argument("--pack", choices=["ml", "web", "data"], help="Optional starter pack (v0.2.0)")
+    p_init.add_argument("--pack", choices=["ml", "web", "data"], help="Optional starter pack (future release)")
     p_init.add_argument("--force", action="store_true", help="Reinitialize an existing .metaensemble/")
     p_init.set_defaults(func=cmd_init)
 
@@ -1270,7 +1270,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     p_doctor.add_argument(
         "--fix", action="store_true",
-        help="Apply safe remediations for fixable check failures. Legacy C1/C6 checks are inert in v0.1.0 and not affected.",
+        help="Apply safe remediations for fixable check failures. Legacy C1/C6 checks are inert and not affected.",
     )
     p_doctor.set_defaults(func=cmd_doctor)
 

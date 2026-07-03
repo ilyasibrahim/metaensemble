@@ -215,6 +215,9 @@ def test_migration_leaves_canonical_files_untouched(tmp_path):
     actions = migrate_vocabulary_state(home=home)
 
     assert canonical.read_text() == original_text
+    # mtime unchanged proves the migrator never rewrote the file, not
+    # merely that it rewrote identical content.
+    assert canonical.stat().st_mtime_ns == original_mtime
     # We may not see the file in actions (which is the correct no-op behavior)
     assert not any(
         a.get("path") == str(canonical) and a["kind"] == "rewrite-yaml"

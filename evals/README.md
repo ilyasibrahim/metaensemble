@@ -46,11 +46,11 @@ evals/
 | Full | Release-gated. Defaults to 5 seeds × every configured cell. | Yes. | Principal-set cap |
 
 The PR tier exists to keep regressions cheap to catch; the full tier
-exists to certify a release. A v0.1.0 release candidate is not allowed
+exists to certify a release. A release candidate is not allowed
 to claim quality-per-token superiority unless the same report includes
 baseline cells and MetaEnsemble cells over the same task set.
 
-v0.1.0 ships a compact `evals/cassettes/bootstrap.jsonl` pack so the
+The release ships a compact `evals/cassettes/bootstrap.jsonl` pack so the
 replay tier works in a clean checkout. That pack is deliberately marked
 non-empirical; it verifies the harness mechanics, not MetaEnsemble's
 quality claim. Live smoke/full reports are empirical for the cells and

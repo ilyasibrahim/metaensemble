@@ -4,7 +4,7 @@
 
 MetaEnsemble gives every agent a persistent ID, every handoff a schema-validated contract, and every run an entry in an append-only ledger. Multiple agents instantiated from one Role specification execute in parallel. Identities survive across sessions. Token-efficient by construction.
 
-**v0.1.0 status:** feedback-first release. The software records and gates local agent work, but measured quality-per-token improvements remain a product hypothesis until the live evaluation set is larger and fully baseline-comparable. See [SYSTEM-CARD.md](./docs/SYSTEM-CARD.md).
+**v0.2.0 status:** feedback-first release. The software records and gates local agent work, but measured quality-per-token improvements remain a product hypothesis until the live evaluation set is larger and fully baseline-comparable. See [SYSTEM-CARD.md](./docs/SYSTEM-CARD.md).
 
 ---
 
@@ -154,7 +154,7 @@ See [DEPLOYMENT.md](./docs/DEPLOYMENT.md) for the per-action behaviour and the f
 
 ## Status
 
-v0.1.0. All core phases complete and tested:
+v0.2.0. All core phases complete and tested:
 
 - Typed substrate (Manifest YAML, Brief JSON, Ledger SQLite + JSONL).
 - Lifecycle hooks for SessionStart, PreToolUse, PostToolUse, Write/deliverable-sync, file-tool provenance, SubagentStop (background-dispatch finalization), and Stop, with command-injection invariants enforced by an audit test.
@@ -166,7 +166,7 @@ v0.1.0. All core phases complete and tested:
 - Ledger field completeness — every documented Ledger field (Role version, model, tool use, files touched, output, gate state, review findings) is a column with an assertion test.
 - Evaluation harness under `evals/` with replay/smoke/full tiers, Wilson confidence intervals, and `pass@budget` / `quality_per_1k_tokens` / `orchestration_overhead_ratio` metrics. The shipped replay pack is a non-empirical bootstrap fixture. Live smoke/full runs are wired for side-effect-free classification-smoke checks; calibration and baseline-superiority claims still require larger labeled/fixture sets.
 
-v0.1.0 is feedback-first. Issues are welcome; contribution guidance will expand after the initial release.
+v0.2.0 is feedback-first. Issues are welcome; see [CONTRIBUTING.md](./CONTRIBUTING.md) to get started.
 
 See [PERFORMANCE.md](./docs/PERFORMANCE.md) for the engineering contract and benchmark numbers, [SYSTEM-CARD.md](./docs/SYSTEM-CARD.md) for known limitations and intended-use boundaries, and [SECURITY.md](./SECURITY.md) for the trust model.
 Release publication is gated by [RELEASE-CHECKLIST.md](./docs/RELEASE-CHECKLIST.md).
@@ -178,7 +178,7 @@ Release publication is gated by [RELEASE-CHECKLIST.md](./docs/RELEASE-CHECKLIST.
 - **[ARCHITECTURE.md](./docs/ARCHITECTURE.md)** — the layered design, the data model, the lifecycle, what MetaEnsemble is and is not.
 - **[USER-GUIDE.md](./docs/USER-GUIDE.md)** — a friendly Principal guide for day-one users.
 - **[PERFORMANCE.md](./docs/PERFORMANCE.md)** — the binding engineering contract: token budgets, time budgets, query rules, and CI-gated benchmarks. Required reading before changing performance-sensitive code.
-- **[RELEASE-CHECKLIST.md](./docs/RELEASE-CHECKLIST.md)** — artifact, security, installer, and live-eval gates for publishing `0.1.0`.
+- **[RELEASE-CHECKLIST.md](./docs/RELEASE-CHECKLIST.md)** — artifact, security, installer, and live-eval gates for publishing a release.
 - **[GLOSSARY.md](./docs/GLOSSARY.md)** — every term defined precisely, every analog named.
 
 ---

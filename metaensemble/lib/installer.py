@@ -1936,8 +1936,8 @@ def _render_survey_v2(
     if not optional:
         if collision_count > 0:
             lines.append(
-                f"None — every curated Role is either already present in your setup as a "
-                f"collision agent (see the collision section above) or has supporting "
+                "None — every curated Role is either already present in your setup as a "
+                "collision agent (see the collision section above) or has supporting "
                 "evidence in this project."
             )
         else:

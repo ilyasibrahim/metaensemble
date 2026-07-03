@@ -984,7 +984,9 @@ def _read_run_rows(db_path: Path, run_ids: set[str]) -> dict[str, tuple[str, str
     conn = sqlite3.connect(uri, uri=True)
     try:
         rows = conn.execute(
-            f"SELECT run_id, outcome, failure_reason FROM runs WHERE run_id IN ({placeholders})",
+            # The interpolated fragment is only generated `?` placeholders;
+            # every value is parameterized. Not an injection surface.
+            f"SELECT run_id, outcome, failure_reason FROM runs WHERE run_id IN ({placeholders})",  # nosec B608
             tuple(sorted(run_ids)),
         ).fetchall()
     finally:

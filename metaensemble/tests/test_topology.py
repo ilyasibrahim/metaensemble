@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import json
 import subprocess
-from pathlib import Path
 
 from metaensemble.lib import topology
 from metaensemble.lib.doctor import check_install_topology

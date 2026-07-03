@@ -108,7 +108,7 @@ A single command turns any project into an MetaEnsemble consumer:
 metaensemble init   # creates .metaensemble/ with Ledger, manifests dir, and budget config
 ```
 
-The `--pack` option (`--pack ml`, `--pack web`, `--pack data`) follows the `dbt init` / `cargo new --lib` model of opinionated starter-pack overlays. Starter packs are reserved for v0.2.0; `metaensemble init` without a pack flag is the v0.1.0 bootstrap.
+The `--pack` option (`--pack ml`, `--pack web`, `--pack data`) follows the `dbt init` / `cargo new --lib` model of opinionated starter-pack overlays. Starter packs are reserved for a future release; `metaensemble init` without a pack flag is the default bootstrap.
 
 ### Hard rule
 
@@ -237,7 +237,7 @@ Persistence: Briefs live in the dispatch prompt context, not on disk. The `runs.
 
 Versioning: the `"v"` field is canonical. Future changes to the Brief schema bump the version; readers refuse unknown versions rather than guess.
 
-Strictness: the Brief schema sets `additionalProperties: false` at the top level and inside its structured `ctx` and `out` objects, matching the Manifest's fail-closed posture in §7. v0.1.0 deliberately keeps Briefs narrow: cross-Executor wire traffic should carry the fields downstream Executors are known to consume, not ad hoc routing hints that disappear silently. Future Coordinator-only metadata belongs in a versioned `extras` field rather than as unknown top-level keys.
+Strictness: the Brief schema sets `additionalProperties: false` at the top level and inside its structured `ctx` and `out` objects, matching the Manifest's fail-closed posture in §7. Briefs deliberately stay narrow: cross-Executor wire traffic should carry the fields downstream Executors are known to consume, not ad hoc routing hints that disappear silently. Future Coordinator-only metadata belongs in a versioned `extras` field rather than as unknown top-level keys.
 
 ---
 
@@ -389,7 +389,7 @@ capacity_calibration:
 
 ### Override
 
-Override capability — bypassing the gate for genuinely urgent work and logging the override in the Ledger as a Run attribute — is reserved for v0.2.0. In v0.1.0, raising the thresholds in `~/.metaensemble/budgets.yaml` is the mechanism for relaxing the gate.
+Override capability — bypassing the gate for genuinely urgent work and logging the override in the Ledger as a Run attribute — is reserved for a future release. Today, raising the thresholds in `~/.metaensemble/budgets.yaml` is the mechanism for relaxing the gate.
 
 ---
 
@@ -449,7 +449,7 @@ The cost gate fires before dispatch because cost is a property of the *intended*
 
 ### Override
 
-Same as the cost gate: v0.1.0 has no in-band override verb. The Principal either accepts the Deliverable (option 1, logged as an override), routes it to peer review, re-dispatches, or splits the work. Project-level threshold relaxation lives in `<project>/.metaensemble/quality.yaml`. v0.2.0 will surface an explicit override verb that records to the Ledger as a Run attribute.
+Same as the cost gate: there is no in-band override verb today. The Principal either accepts the Deliverable (option 1, logged as an override), routes it to peer review, re-dispatches, or splits the work. Project-level threshold relaxation lives in `<project>/.metaensemble/quality.yaml`. A future release will surface an explicit override verb that records to the Ledger as a Run attribute.
 
 ---
 

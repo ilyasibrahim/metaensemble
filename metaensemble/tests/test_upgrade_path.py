@@ -9,10 +9,8 @@ See addendum Addition 2.
 """
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
-import pytest
 
 from metaensemble.lib.installer import remediate_stale_managed_symlinks
 

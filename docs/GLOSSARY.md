@@ -189,13 +189,13 @@ Project-specific Roles, Manifests, skills, starter packs. Wins on conflicts with
 **Shape:** CLI bootstrap command.
 **Analog:** `dbt init`, `npx create-next-app`, `cargo new --lib`.
 
-Creates the `<project>/.metaensemble/` skeleton. In v0.1.0 the optional `--pack <name>` flag is accepted only to explain that starter packs (`ml`, `web`, `data`) are reserved for v0.2.0; it does not pre-fill Roles yet. The same skeleton is also created idempotently by `metaensemble adopt`, so explicit init is optional.
+Creates the `<project>/.metaensemble/` skeleton. The optional `--pack <name>` flag is accepted only to explain that starter packs (`ml`, `web`, `data`) are reserved for a future release; it does not pre-fill Roles yet. The same skeleton is also created idempotently by `metaensemble adopt`, so explicit init is optional.
 
 ### `metaensemble doctor`
 **Shape:** CLI diagnostic command.
 **Analog:** `npm doctor`, `brew doctor`, `git fsck`.
 
-Nine checks the user runs after install (or whenever something feels off). `C1` and `C6` are legacy in v0.1.0 and return `SKIP`. The active checks validate that the hook commands in `~/.claude/settings.json` resolve to existing scripts (`C2`), that the JSON schemas compile (`C3`), that the project's state directory is initialized (`C4`), that the hook error log is healthy (`C5`), that the runtime's rate-limit feed is wired up and freshly captured (`C7`), that slash commands are not duplicated across `~/.claude/commands/` and `~/.claude/commands/metaensemble/` (`C8`), and that the vendored runtime at `~/.metaensemble/runtime/` is a valid symlink into a version dir with a verifying MANIFEST and an executable runner (`C9`). The `--fix` flag applies safe remediations.
+Nine checks the user runs after install (or whenever something feels off). `C1` and `C6` are legacy and return `SKIP`. The active checks validate that the hook commands in `~/.claude/settings.json` resolve to existing scripts (`C2`), that the JSON schemas compile (`C3`), that the project's state directory is initialized (`C4`), that the hook error log is healthy (`C5`), that the runtime's rate-limit feed is wired up and freshly captured (`C7`), that slash commands are not duplicated across `~/.claude/commands/` and `~/.claude/commands/metaensemble/` (`C8`), and that the vendored runtime at `~/.metaensemble/runtime/` is a valid symlink into a version dir with a verifying MANIFEST and an executable runner (`C9`). The `--fix` flag applies safe remediations.
 
 ### Survey decisions
 **Shape:** YAML file at `<project>/.metaensemble/install-decisions.yaml`.
@@ -271,9 +271,9 @@ The act of reconstructing SQLite state from `runs.jsonl`. Used after a database 
 
 ---
 
-## Recovery and provenance (v0.1.0 additions)
+## Recovery and provenance
 
-These terms cover the v0.1.0 recovery surface: closing Runs the live hooks could not finish, and the per-Run provenance the post-task hook now persists. Schema source of truth: `metaensemble/state/migrations/002_outcome_extended.sql` (CHECK constraint extension) and `metaensemble/state/migrations/003_run_provenance.sql` (additive columns).
+These terms cover the recovery surface: closing Runs the live hooks could not finish, and the per-Run provenance the post-task hook persists. Schema source of truth: `metaensemble/state/migrations/002_outcome_extended.sql` (CHECK constraint extension) and `metaensemble/state/migrations/003_run_provenance.sql` (additive columns).
 
 ### Reconcile (verb / CLI command)
 **Shape:** `metaensemble reconcile [--older-than-minutes N] [--dry-run]` plus the Stop-hook and session-start automatic sweeps.
@@ -295,7 +295,7 @@ A Run that did not complete because its PostToolUse hook never fired. Written by
 ### `budget_exceeded` (outcome)
 **Shape:** Value of the `runs.outcome` column.
 
-A Run whose parent `claude --max-budget-usd` invocation exited because the budget was exhausted. Today, v0.1.0 reconciles such Runs as `interrupted` and upgrades to `budget_exceeded` only when transcript evidence of the budget kill is present. The schema accepts both values via the 002 migration; the detection path is documented as a remaining v0.2.0 sharpening in `SYSTEM-CARD.md`.
+A Run whose parent `claude --max-budget-usd` invocation exited because the budget was exhausted. Today, reconcile records such Runs as `interrupted` and upgrades to `budget_exceeded` only when transcript evidence of the budget kill is present. The schema accepts both values via the 002 migration; sharper detection is documented as remaining work in `SYSTEM-CARD.md`.
 
 ### `requested_model_tier`
 **Shape:** TEXT column on `runs`.

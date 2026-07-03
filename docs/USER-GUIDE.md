@@ -66,7 +66,7 @@ If you installed from a clone with `pip install -e .`, `user-setup` prints a not
 metaensemble doctor
 ```
 
-The doctor prints a Markdown digest of the install's health. With Steps 1 and 2 done, `C9 Runtime vendored` and `C12 Install topology` should both report `OK`. `C1` and `C6` are legacy in v0.1.0 and will show as `SKIP`. `C4 Project state directory initialized` will WARN until you complete Step 4 below from your project's root.
+The doctor prints a Markdown digest of the install's health. With Steps 1 and 2 done, `C9 Runtime vendored` and `C12 Install topology` should both report `OK`. `C1` and `C6` are legacy and will show as `SKIP`. `C4 Project state directory initialized` will WARN until you complete Step 4 below from your project's root.
 
 ### Step 4 — Bootstrap your project
 
@@ -122,7 +122,7 @@ The four `kind` values map to the four cases the inspection distinguishes:
 - **`curated_relevant`** — a curated Role whose project signals match your codebase. Default: `activate`.
 - **`curated_optional`** — a curated Role with no project signals. Default: `retire`. Switch to `activate` if you want it on your roster anyway.
 
-Project-signal detection is filesystem-based, not a semantic model of your repo. v0.1.0 covers Python ML, data engineering, web app, library, and infrastructure project archetypes via deterministic filesystem signals (no model calls). Detection is signal-based and additive — your project may match multiple Roles. Domain-specific agents you already have are discovered during inspection and can be preserved or converted into Roles; they do not need to be part of MetaEnsemble's default curated set. The inspection report includes a **Signal probe summary** section listing, for every curated Role, exactly which signals were probed and which fired, so you can see why a Role matched or didn't. If a Role you expect to match did not, edit `install-decisions.yaml` to override the default; the signal catalog can also grow in a v0.1.x point release.
+Project-signal detection is filesystem-based, not a semantic model of your repo. Detection covers Python ML, data engineering, web app, library, and infrastructure project archetypes via deterministic filesystem signals (no model calls). Detection is signal-based and additive — your project may match multiple Roles. Domain-specific agents you already have are discovered during inspection and can be preserved or converted into Roles; they do not need to be part of MetaEnsemble's default curated set. The inspection report includes a **Signal probe summary** section listing, for every curated Role, exactly which signals were probed and which fired, so you can see why a Role matched or didn't. If a Role you expect to match did not, edit `install-decisions.yaml` to override the default; the signal catalog can also grow in a point release.
 
 When you have made your edits, install:
 
@@ -405,13 +405,17 @@ substantive work flowing without prompting on every Run.
 
 ---
 
-## Python deliverable check — what the Coordinator checks after a Run
+## Deliverable check — what the Coordinator checks after a Run
 
-Every successful Run whose Manifest declares Python deliverables can
-pass through a five-axis Python deliverable check before the Deliverable
-is treated as final. The code still calls this component the quality
-gate, but v0.1.0 scope is narrower than a universal quality judge:
-non-Python Deliverables, missing Manifests, absent tools, and missing
+Every successful Run whose Manifest declares deliverables can pass
+through a five-axis deliverable check before the Deliverable is treated
+as final. Python deliverables run the built-in tool runners below;
+non-Python deliverables run the same five axes through the commands you
+configure under `axis_commands` in `.metaensemble/quality.yaml` (for
+example `npm test --silent` as the correctness command), each reported
+under a distinct `<axis>:cmd` name. The code still calls this component
+the quality gate, but its scope is narrower than a universal quality
+judge: missing Manifests, absent tools, unconfigured axes, and missing
 coverage data produce skipped axes rather than fabricated confidence.
 The check runs in the PostToolUse hook and never blocks the dispatch
 itself — the Deliverable has already been produced — but it surfaces
@@ -489,7 +493,7 @@ The day-to-day shape: when you start a new project or a new line of work, you sp
 
 ## When something feels off
 
-Reach for `metaensemble doctor` first — it walks ten live checks (C1 and C6 are legacy SKIPs in v0.1.0) and tells you which ones failed and how to fix them. Most operational issues map to one of the patterns below.
+Reach for `metaensemble doctor` first — it walks ten live checks (C1 and C6 are legacy SKIPs) and tells you which ones failed and how to fix them. Most operational issues map to one of the patterns below.
 
 If your project lives in an iCloud-synced directory (e.g., `~/Desktop/` with iCloud Desktop & Documents Sync enabled), consider excluding `.venv/` from iCloud sync. iCloud's conflict-resolution against rapid `pip install` file churn produces phantom duplicate files in `site-packages` (`architect 2.md`, `cli 2.py`, etc.); MetaEnsemble filters them correctly at catalog enumeration time and `metaensemble doctor` C11 surfaces them as a WARN, but they consume iCloud quota and slow installs.
 
@@ -544,7 +548,7 @@ python -m build --wheel
 
 ### Three diagnostic surfaces
 
-1. **`metaensemble doctor`** — nine checks (C1, C6 marked as legacy SKIP in v0.1.0), action-oriented status line. Always your first stop.
+1. **`metaensemble doctor`** — nine checks (C1, C6 marked as legacy SKIP), action-oriented status line. Always your first stop.
 2. **`.metaensemble/hooks/log.jsonl`** — structured error log written by every hook on failure. Each line is one event. The last 5–10 entries usually tell the story.
 3. **`/ledger recent --limit 20` or `metaensemble ledger recent --limit 20`** — what the system has been doing. If the recent Runs do not match the work you asked for, the problem is upstream of MetaEnsemble, in the conversation between you and the Coordinator. Surface it to the Coordinator and redirect.
 

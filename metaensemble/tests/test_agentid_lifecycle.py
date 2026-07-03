@@ -13,7 +13,6 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-import pytest
 
 from metaensemble.lib.file_events import (
     ActiveDispatch,
