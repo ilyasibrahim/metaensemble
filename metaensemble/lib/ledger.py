@@ -193,6 +193,15 @@ class WindowSummary:
     total_tokens_out: int
 
 
+@dataclass(frozen=True)
+class ExecutorRunCount:
+    """Run tally for one Executor, joined to its alias and Role."""
+
+    alias: str
+    role_id: str
+    run_count: int
+
+
 _REQUIRED_TEXT_RUN_FIELDS = (
     "run_id", "executor_id", "task_id", "model", "window_id",
     "started_ts", "ended_ts", "outcome",
@@ -602,6 +611,49 @@ class Ledger:
             total_tokens_in=row["ti"],
             total_tokens_out=row["tos"],
         )
+
+    def get_outcome_counts(self) -> dict[str, int]:
+        """O(N) single-pass aggregate over runs; rides no index by design.
+
+        `GROUP BY outcome` has no supporting index (verified: `SCAN runs`
+        + temp b-tree), but the result set is bounded by the six
+        ALLOWED_RUN_OUTCOMES literals (R5), so the output never grows
+        with Ledger size. Principal-invoked stats surface only — never
+        called from hooks, so the R7 latency budget does not apply.
+        """
+        rows = self._conn.execute(
+            "SELECT outcome, COUNT(*) AS cnt FROM runs GROUP BY outcome"
+        ).fetchall()
+        return {row["outcome"]: int(row["cnt"]) for row in rows}
+
+    def get_executor_run_counts(self, limit: int = 5) -> list[ExecutorRunCount]:
+        """O(N + E log E) using idx_runs_executor; E = distinct Executors.
+
+        The covering index groups runs by executor_id in index order, the
+        executors primary key resolves alias/role_id once per group, and
+        the temp b-tree sorts E group rows — never N run rows. K = limit
+        rows returned (R5, default 5).
+        """
+        rows = self._conn.execute(
+            """
+            SELECT e.alias AS alias, e.role_id AS role_id,
+                   COUNT(*) AS run_count
+            FROM runs r
+            INNER JOIN executors e ON e.executor_id = r.executor_id
+            GROUP BY r.executor_id
+            ORDER BY run_count DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+        return [
+            ExecutorRunCount(
+                alias=row["alias"],
+                role_id=row["role_id"],
+                run_count=int(row["run_count"]),
+            )
+            for row in rows
+        ]
 
     def get_executor_by_alias(self, alias: str) -> Executor | None:
         """O(log N) using idx_executors_alias."""

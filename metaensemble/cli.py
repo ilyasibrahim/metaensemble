@@ -79,6 +79,11 @@ def cmd_perf(_: argparse.Namespace) -> int:
     return perf.main()
 
 
+def cmd_stats(_: argparse.Namespace) -> int:
+    from metaensemble.tools import stats
+    return stats.main()
+
+
 def cmd_ledger(args: argparse.Namespace) -> int:
     from metaensemble.tools import ledger
     return ledger.main(args.subargs)
@@ -1099,6 +1104,9 @@ def main(argv: list[str] | None = None) -> int:
 
     p_perf = sub.add_parser("perf", help="Rolling performance metrics")
     p_perf.set_defaults(func=cmd_perf)
+
+    p_stats = sub.add_parser("stats", help="One-screen Ledger growth and run-mix summary")
+    p_stats.set_defaults(func=cmd_stats)
 
     p_ledger = sub.add_parser("ledger", help="Query the Ledger (see `ledger --help`)")
     p_ledger.add_argument("subargs", nargs=argparse.REMAINDER)

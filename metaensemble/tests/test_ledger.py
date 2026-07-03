@@ -154,6 +154,73 @@ def test_get_window_burn_aggregates_correctly(
     assert s2.total_tokens_in == 400
 
 
+def test_get_outcome_counts_groups_by_outcome(
+    tmp_ledger, sample_executor, sample_task
+):
+    for _ in range(3):
+        tmp_ledger.append_run(_make_run(sample_executor.executor_id, sample_task))
+    tmp_ledger.append_run(_make_run(
+        sample_executor.executor_id, sample_task,
+        outcome="failed", failure_reason="timeout",
+    ))
+
+    assert tmp_ledger.get_outcome_counts() == {"ok": 3, "failed": 1}
+
+
+def test_get_outcome_counts_empty_ledger(tmp_ledger):
+    assert tmp_ledger.get_outcome_counts() == {}
+
+
+def test_get_executor_run_counts_orders_by_run_count(
+    tmp_ledger, sample_executor, sample_task, sample_role
+):
+    other = Executor(
+        executor_id=str(uuid7()),
+        alias=make_alias("xx", uuid7()),
+        role_id=sample_role,
+        parent_executor_id=None,
+        created_ts=datetime.now().isoformat(),
+        last_seen_ts=datetime.now().isoformat(),
+        status="active",
+    )
+    tmp_ledger.upsert_executor(other)
+
+    for _ in range(2):
+        tmp_ledger.append_run(_make_run(sample_executor.executor_id, sample_task))
+    for _ in range(5):
+        tmp_ledger.append_run(_make_run(other.executor_id, sample_task))
+
+    counts = tmp_ledger.get_executor_run_counts()
+    assert [(c.alias, c.role_id, c.run_count) for c in counts] == [
+        (other.alias, sample_role, 5),
+        (sample_executor.alias, sample_role, 2),
+    ]
+
+
+def test_get_executor_run_counts_respects_limit(
+    tmp_ledger, sample_executor, sample_task, sample_role
+):
+    other = Executor(
+        executor_id=str(uuid7()),
+        alias=make_alias("xx", uuid7()),
+        role_id=sample_role,
+        parent_executor_id=None,
+        created_ts=datetime.now().isoformat(),
+        last_seen_ts=datetime.now().isoformat(),
+        status="active",
+    )
+    tmp_ledger.upsert_executor(other)
+
+    tmp_ledger.append_run(_make_run(sample_executor.executor_id, sample_task))
+    for _ in range(3):
+        tmp_ledger.append_run(_make_run(other.executor_id, sample_task))
+
+    counts = tmp_ledger.get_executor_run_counts(limit=1)
+    assert len(counts) == 1
+    assert counts[0].alias == other.alias
+    assert counts[0].run_count == 3
+
+
 def test_get_executor_by_alias_finds_match(tmp_ledger, sample_executor):
     found = tmp_ledger.get_executor_by_alias(sample_executor.alias)
     assert found is not None
