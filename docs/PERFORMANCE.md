@@ -110,6 +110,15 @@ def ensure_role(...) -> None:
 
 def ensure_task(...) -> None:
     """O(log N) insert-if-absent using tasks primary key."""
+
+def get_outcome_counts() -> dict[str, int]:
+    """O(N) single-pass GROUP BY outcome; rides no index by design.
+    Output bounded by the six ALLOWED_RUN_OUTCOMES literals (R5).
+    Principal-invoked only (`metaensemble stats`), never hook-adjacent."""
+
+def get_executor_run_counts(limit: int = 5) -> list[ExecutorRunCount]:
+    """O(N + E log E) riding idx_runs_executor as a covering index plus
+    the executors primary key for the join; LIMIT-bounded (R5)."""
 ```
 
 Adding a new query function is a small, reviewable change. Introducing raw SQL outside the lib is release-blocking.

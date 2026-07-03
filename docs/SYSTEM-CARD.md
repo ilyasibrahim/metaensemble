@@ -70,9 +70,12 @@ The evaluation harness exists at `evals/` and is documented in
 
 **Calibrated AI-quality claims are not yet supported.** The harness now
 reports `pass@budget` and `quality_per_1k_tokens` for live smoke/full
-runs. On 2026-05-19, a constrained `MM_full` smoke run
-scored 12/12 on the shipped smoke set. That is pipeline evidence, not a
-calibration result and not a baseline superiority result. The claim
+runs. On 2026-07-03, the v0.2.0 release smoke (`MM_full`, 1 seed, the
+12-item smoke set, USD 0.30 cap) scored 12/12 — `pass@budget` 1.000
+(95% CI 0.757–1.000, n=12) with zero failed-run token waste (report
+`evals/reports/20260703T164846Z-smoke.md`, generated locally; the
+prior 2026-05-19 smoke also scored 12/12). That is pipeline evidence,
+not a calibration result and not a baseline superiority result. The claim
 that the ensemble improves quality per token over a single-agent
 baseline remains a product hypothesis until all baseline cells run
 against real Suite-A fixtures and an independently labeled domain set.

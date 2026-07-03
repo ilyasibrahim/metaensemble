@@ -23,6 +23,10 @@ live testing surfaced are fixed below.
 
 **Fourth cost-gate option.** NOTIFY and BLOCK surfaces, and their persisted sentinels, now offer "Send the Manifest back for revision" alongside approve / drop tier / split.
 
+**doctor C13 — pending sidecar hygiene.** A new check WARNs when `pending/quarantine/` holds sidecars reconcile moved aside, when `pending/*.json` outlives the 24-hour staleness threshold (the session-start sweep should have caught it), or when a pending sidecar fails to parse (reconcile can never sweep those). Each condition carries its own remediation; absent directories are OK.
+
+**`metaensemble stats`.** A read-only, one-screen Ledger digest: total Runs and outcome mix with percentages, SQLite + JSONL footprint with the derived KiB/Run against PERFORMANCE.md §5.1's measured constant, top-5 Executors by Run count, and a Ledger-scoped current-window note. Backed by two new R1-compliant named queries (`get_outcome_counts`, `get_executor_run_counts`).
+
 **Background and fan-out dispatch lifecycle.** A `SubagentStop` hook (`subagent_stop.py`) finalizes background-dispatched Runs, correlated strictly by the runtime `agentId` so concurrent and fan-out dispatches in one session finalize independently. `post_task.py` now detects the Agent tool's launch stub, reconciles it to the pre-task sidecar by `tool_use_id`, records an `agentId`-keyed active-dispatch marker so the subagent's file writes stay authorized, and defers finalization to `SubagentStop`. Synchronous and background dispatches share one `finalize_pending` path, so both produce identical Run records.
 
 **Configurable report location.** `install-decisions.yaml` gains a `report_root` field. Greenfield projects default to the machine-local, ignored `.metaensemble/reports`; existing projects keep a detected convention such as `.claude/reports`. The Coordinator writes a synthesis report file only when the Manifest explicitly declares it, synthesizing in the Principal-facing response otherwise.

@@ -493,7 +493,7 @@ The day-to-day shape: when you start a new project or a new line of work, you sp
 
 ## When something feels off
 
-Reach for `metaensemble doctor` first — it walks ten live checks (C1 and C6 are legacy SKIPs) and tells you which ones failed and how to fix them. Most operational issues map to one of the patterns below.
+Reach for `metaensemble doctor` first — it walks eleven live checks (C1 and C6 are legacy SKIPs) and tells you which ones failed and how to fix them. Most operational issues map to one of the patterns below.
 
 If your project lives in an iCloud-synced directory (e.g., `~/Desktop/` with iCloud Desktop & Documents Sync enabled), consider excluding `.venv/` from iCloud sync. iCloud's conflict-resolution against rapid `pip install` file churn produces phantom duplicate files in `site-packages` (`architect 2.md`, `cli 2.py`, etc.); MetaEnsemble filters them correctly at catalog enumeration time and `metaensemble doctor` C11 surfaces them as a WARN, but they consume iCloud quota and slow installs.
 
@@ -548,7 +548,7 @@ python -m build --wheel
 
 ### Three diagnostic surfaces
 
-1. **`metaensemble doctor`** — nine checks (C1, C6 marked as legacy SKIP), action-oriented status line. Always your first stop.
+1. **`metaensemble doctor`** — eleven live checks (C1, C6 marked as legacy SKIP), action-oriented status line. Always your first stop.
 2. **`.metaensemble/hooks/log.jsonl`** — structured error log written by every hook on failure. Each line is one event. The last 5–10 entries usually tell the story.
 3. **`/ledger recent --limit 20` or `metaensemble ledger recent --limit 20`** — what the system has been doing. If the recent Runs do not match the work you asked for, the problem is upstream of MetaEnsemble, in the conversation between you and the Coordinator. Surface it to the Coordinator and redirect.
 

@@ -158,7 +158,7 @@ v0.2.0. All core phases complete and tested:
 
 - Typed substrate (Manifest YAML, Brief JSON, Ledger SQLite + JSONL).
 - Lifecycle hooks for SessionStart, PreToolUse, PostToolUse, Write/deliverable-sync, file-tool provenance, SubagentStop (background-dispatch finalization), and Stop, with command-injection invariants enforced by an audit test.
-- Principal-facing surface: seven slash commands plus CLI subcommands including `metaensemble setup`, `metaensemble user-setup`, `metaensemble adopt`, `metaensemble unadopt`, `metaensemble user-teardown`, `metaensemble reconcile`, `metaensemble eval`, and `metaensemble projects`.
+- Principal-facing surface: seven slash commands plus CLI subcommands including `metaensemble setup`, `metaensemble user-setup`, `metaensemble adopt`, `metaensemble unadopt`, `metaensemble user-teardown`, `metaensemble reconcile`, `metaensemble eval`, `metaensemble stats`, and `metaensemble projects`.
 - Multi-instance patterns (fanout / consensus / shadow / peer-review) with the `N ≥ 2` guard enforced deterministically by the PreToolUse marker hook.
 - Installer with idempotent re-runs, explicit purge modes, and a residue report after every uninstall.
 - Five-axis deliverable check on successful Runs: pytest, bandit, ruff, radon, and coverage for `.py` deliverables, plus project-configured per-axis commands (`axis_commands` in `quality.yaml`) so non-Python deliverables are checked across the same correctness/security/maintainability/complexity/coverage axes; quality runners ship in the `[test]` extras so CI runs the real tools.
