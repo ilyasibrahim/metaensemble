@@ -12,6 +12,7 @@ from pathlib import Path
 from metaensemble.lib.doctor import (
     check_hook_log,
     check_ledger_recording_health,
+    check_pending_sidecar_hygiene,
     check_project_state,
     check_schemas,
     check_window_capacity_calibrated,
@@ -535,3 +536,113 @@ def test_doctor_c1_c6_deprecated_c9_active(tmp_path, monkeypatch):
     assert "MANIFEST verified" in result.detail
     assert _doctor.check_pth_files().status == "SKIP"
     assert _doctor.check_venv_entry_point().status == "SKIP"
+
+
+# --- C13: pending sidecar hygiene ------------------------------------------
+
+
+def _write_pending_sidecar(project: Path, run_id: str, started_ts: str) -> Path:
+    pending = project / ".metaensemble" / "state" / "pending"
+    pending.mkdir(parents=True, exist_ok=True)
+    path = pending / f"{run_id}.json"
+    path.write_text(json.dumps({"run_id": run_id, "started_ts": started_ts}))
+    return path
+
+
+def test_c13_quarantined_sidecar_returns_warn(tmp_path, monkeypatch):
+    """A quarantined sidecar must surface its run_id and point at the
+    inspect-then-delete-or-restore remediation."""
+    monkeypatch.chdir(tmp_path)
+    quarantine = tmp_path / ".metaensemble" / "state" / "pending" / "quarantine"
+    quarantine.mkdir(parents=True)
+    (quarantine / "run-quarantined.json").write_text(
+        json.dumps({"run_id": "run-quarantined"})
+    )
+
+    result = check_pending_sidecar_hygiene()
+
+    assert result.check_id == "C13"
+    assert result.status == "WARN"
+    assert "run-quarantined" in result.detail
+    assert "metaensemble reconcile" in result.remediation
+
+
+def test_c13_quarantine_listing_is_bounded(tmp_path, monkeypatch):
+    """The detail lists at most 5 run_ids plus the total count, so a
+    directory full of residue cannot flood the report."""
+    monkeypatch.chdir(tmp_path)
+    quarantine = tmp_path / ".metaensemble" / "state" / "pending" / "quarantine"
+    quarantine.mkdir(parents=True)
+    for i in range(7):
+        (quarantine / f"run-q{i}.json").write_text("{}")
+
+    result = check_pending_sidecar_hygiene()
+
+    assert result.status == "WARN"
+    assert "7 quarantined" in result.detail
+    assert "run-q4" in result.detail
+    assert "run-q6" not in result.detail
+    assert "2 more" in result.detail
+
+
+def test_c13_stale_pending_sidecar_returns_warn(tmp_path, monkeypatch):
+    """A pending sidecar whose started_ts is 2 days old should have been
+    swept by the session-start reconcile; its survival is a WARN."""
+    from datetime import timedelta
+
+    monkeypatch.chdir(tmp_path)
+    started = (datetime.now(timezone.utc) - timedelta(days=2)).isoformat()
+    _write_pending_sidecar(tmp_path, "run-stale", started)
+
+    result = check_pending_sidecar_hygiene()
+
+    assert result.status == "WARN"
+    assert "run-stale" in result.detail
+    assert "metaensemble reconcile" in result.remediation
+
+
+def test_c13_fresh_pending_sidecar_returns_ok(tmp_path, monkeypatch):
+    """A fresh pending sidecar is normal in-flight state, not a problem."""
+    monkeypatch.chdir(tmp_path)
+    _write_pending_sidecar(
+        tmp_path, "run-fresh", datetime.now(timezone.utc).isoformat()
+    )
+
+    result = check_pending_sidecar_hygiene()
+
+    assert result.status == "OK"
+
+
+def test_c13_absent_directories_return_ok(tmp_path, monkeypatch):
+    """No pending/ or quarantine/ directory at all is a healthy state."""
+    monkeypatch.chdir(tmp_path)
+
+    result = check_pending_sidecar_hygiene()
+
+    assert result.status == "OK"
+
+
+def test_c13_corrupt_pending_sidecar_warns_without_crash(tmp_path, monkeypatch):
+    """A sidecar that fails to parse counts toward the WARN with a
+    parse-failure note — reconcile skips it silently, so doctor is the
+    only surface that can flag it."""
+    monkeypatch.chdir(tmp_path)
+    pending = tmp_path / ".metaensemble" / "state" / "pending"
+    pending.mkdir(parents=True)
+    (pending / "run-corrupt.json").write_text("{not json")
+
+    result = check_pending_sidecar_hygiene()
+
+    assert result.status == "WARN"
+    assert "parse" in result.detail.lower()
+    assert "run-corrupt" in result.detail
+
+
+def test_c13_registered_in_run_doctor(tmp_path, monkeypatch):
+    """C13 must appear in the doctor's check registry and rendered output."""
+    monkeypatch.chdir(tmp_path)
+
+    report = run_doctor()
+
+    assert any(r.check_id == "C13" for r in report.results)
+    assert "C13" in render_report(report)

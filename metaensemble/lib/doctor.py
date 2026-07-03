@@ -1359,12 +1359,140 @@ def check_install_topology() -> CheckResult:
     )
 
 
+def _format_bounded_run_ids(ids: list[str], limit: int = 5) -> str:
+    """Render at most `limit` ids so one bad directory cannot flood the report."""
+    shown = ", ".join(ids[:limit])
+    if len(ids) > limit:
+        shown += f", ... ({len(ids) - limit} more)"
+    return shown
+
+
+def check_pending_sidecar_hygiene(
+    *,
+    stale_after: timedelta = timedelta(hours=24),
+    now: datetime | None = None,
+) -> CheckResult:
+    """C13: surface quarantined and stale pending sidecars.
+
+    Reconcile moves a sidecar it cannot turn into a Run row to
+    `<state>/pending/quarantine/` and logs the move once
+    (`reconcile-sidecar-quarantined`); after that, nothing tells the
+    Principal the evidence file exists. Pending sidecars older than
+    `stale_after` are a different signal: the session-start reconcile
+    sweeps anything past one hour, so a sidecar that survived a full day
+    means the sweep is not running (hooks unwired, or no session started
+    since the run was stranded). Age mirrors reconcile's logic — the
+    sidecar's `started_ts`, file mtime as fallback. Sidecars that do not
+    parse as JSON count toward the WARN instead of raising: every
+    reconcile pass skips them silently, so only a human can remove them.
+    """
+    state_dir = Path.cwd() / ".metaensemble" / "state"
+    pending_path = state_dir / "pending"
+    quarantine_path = pending_path / "quarantine"
+    stale_hours = stale_after.total_seconds() / 3600
+
+    try:
+        quarantined = sorted(
+            entry.stem for entry in quarantine_path.glob("*.json")
+        )
+
+        reference = now or datetime.now(timezone.utc)
+        cutoff = reference - stale_after
+        stale: list[str] = []
+        unreadable: list[str] = []
+        for entry in sorted(pending_path.glob("*.json")):
+            try:
+                payload = json.loads(entry.read_text())
+            except (OSError, json.JSONDecodeError):
+                unreadable.append(entry.name)
+                continue
+            ts: datetime | None = None
+            if isinstance(payload, dict):
+                ts = _parse_doctor_ts(payload.get("started_ts"))
+            if ts is None:
+                try:
+                    ts = datetime.fromtimestamp(
+                        entry.stat().st_mtime, tz=timezone.utc
+                    )
+                except OSError:
+                    unreadable.append(entry.name)
+                    continue
+            if ts <= cutoff:
+                stale.append(entry.stem)
+    except Exception as exc:
+        return CheckResult(
+            check_id="C13",
+            title="Pending sidecar hygiene",
+            status="WARN",
+            detail=f"Could not inspect pending sidecars: {exc} ({pending_path}).",
+        )
+
+    problems: list[str] = []
+    if quarantined:
+        problems.append(
+            f"{len(quarantined)} quarantined sidecar(s) in {quarantine_path}: "
+            + _format_bounded_run_ids(quarantined)
+        )
+    if stale:
+        problems.append(
+            f"{len(stale)} pending sidecar(s) older than {stale_hours:g}h: "
+            + _format_bounded_run_ids(stale)
+        )
+    if unreadable:
+        problems.append(
+            f"{len(unreadable)} pending sidecar(s) that fail to parse as JSON: "
+            + _format_bounded_run_ids(unreadable)
+        )
+
+    if not problems:
+        return CheckResult(
+            check_id="C13",
+            title="Pending sidecar hygiene",
+            status="OK",
+            detail=(
+                "No quarantined sidecars and no pending sidecars older than "
+                f"{stale_hours:g}h ({pending_path})."
+            ),
+        )
+
+    remediation_parts: list[str] = []
+    if quarantined:
+        remediation_parts.append(
+            "Inspect each quarantined sidecar (the matching "
+            "`reconcile-sidecar-quarantined` entry in "
+            ".metaensemble/hooks/log.jsonl records why it was moved). Delete "
+            "it when it is test residue or unrecoverable; otherwise fix the "
+            "cause, move the file back into pending/, and run "
+            "`metaensemble reconcile`."
+        )
+    if stale:
+        remediation_parts.append(
+            "Run `metaensemble reconcile` from the project root. Stale "
+            "sidecars should have been swept by the hourly session-start "
+            "reconcile; if they keep reappearing, check C2 (hook wiring)."
+        )
+    if unreadable:
+        remediation_parts.append(
+            "Unparseable sidecars are skipped by every reconcile pass; "
+            "inspect and delete (or repair) them by hand."
+        )
+
+    return CheckResult(
+        check_id="C13",
+        title="Pending sidecar hygiene",
+        status="WARN",
+        detail="; ".join(problems) + ".",
+        remediation="\n".join(remediation_parts),
+    )
+
+
 def run_doctor(*, fix: bool = False) -> DoctorReport:
     """Run every check; optionally apply safe fixes.
 
     C1 and C6 are SKIPs (deprecated, kept for ID stability).
     C9 covers runtime vendoring health.
     C12 covers install-topology (non-editable, non-load-bearing on dev source).
+    C13 covers pending-sidecar hygiene (quarantined + stale sidecars).
     """
     return DoctorReport(results=[
         check_pth_files(fix=fix),
@@ -1379,6 +1507,7 @@ def run_doctor(*, fix: bool = False) -> DoctorReport:
         check_ledger_recording_health(),
         check_catalog_hygiene(),
         check_install_topology(),
+        check_pending_sidecar_hygiene(),
     ])
 
 
