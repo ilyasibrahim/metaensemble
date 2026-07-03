@@ -41,7 +41,11 @@ def estimate_tokens(text: str | None) -> int:
 
 _MANIFEST_RE = re.compile(r"\[manifest:\s*(hm-[0-9a-fA-F\-]+)\]")
 _CONTINUING_RE = re.compile(r"\[continuing:\s*([a-z0-9]+-[0-9a-f]{3})\]")
-_TASK_RE = re.compile(r"\[task:\s*(task-[0-9a-fA-F\-]+)\]")
+# Task ids accept any word/dash tail, not just hex: Coordinators write
+# semantic ids (`task-livetest-020`) as naturally as generated ones, and a
+# marker that silently fails to match loses the fan-out grouping it was
+# written to create (live-test finding, 2026-07-03).
+_TASK_RE = re.compile(r"\[task:\s*(task-[A-Za-z0-9\-]+)\]")
 _FRESH_RE = re.compile(r"\[fresh\]")
 _FANOUT_RE = re.compile(r"\[fanout:\s*(\d+)\]")
 _CONSENSUS_RE = re.compile(r"\[consensus:\s*(\d+)\]")

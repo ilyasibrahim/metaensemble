@@ -319,6 +319,30 @@ def test_scaffold_prefills_claude_md_when_never_adopted(tmp_path):
     assert data["context"]["files"] == [{"path": "CLAUDE.md", "role": "memory"}]
 
 
+def test_scaffold_fallback_detects_all_surfaces_when_decisions_predate_key(tmp_path):
+    """Live-test regression (2026-07-03): adopt never rewrites an existing
+    install-decisions.yaml, so a project adopted before the
+    `memory_surfaces` key exists keeps a decisions file without it. The
+    scaffold's fallback must then re-detect ALL surfaces the installer
+    would record — not just the root CLAUDE.md — or `.claude/CLAUDE.md`
+    silently drops out of every Manifest on exactly the projects that
+    adopted earliest."""
+    project = tmp_path / "proj"
+    (project / ".metaensemble").mkdir(parents=True)
+    # Pre-key decisions file: valid YAML, no memory_surfaces key.
+    (project / ".metaensemble" / "install-decisions.yaml").write_text(
+        "report_root: \".metaensemble/reports\"\nagents: []\n"
+    )
+    (project / ".claude").mkdir()
+    (project / ".claude" / "CLAUDE.md").write_text("# scoped memory\n")
+
+    data = yaml.safe_load(scaffold_manifest("ship-feature", project=project))
+
+    assert data["context"]["files"] == [
+        {"path": ".claude/CLAUDE.md", "role": "memory"}
+    ]
+
+
 def test_scaffold_context_files_stay_todo_without_memory_surfaces(tmp_path):
     project = tmp_path / "proj"
     project.mkdir()

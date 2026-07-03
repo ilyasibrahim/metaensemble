@@ -7,7 +7,13 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [Unreleased]
+## [0.2.0] — 2026-07-03
+
+Brings the implementation to the level of the published article: every
+capability the article claims is now true of the code. Verified by a
+pre-release live test across five adopted projects (runtime re-vendor,
+re-adoption, scaffold/doctor/dispatch exercises); the four issues that
+live testing surfaced are fixed below.
 
 ### Added
 
@@ -32,6 +38,14 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 **Reconcile quarantines sidecars it cannot record.** A pending sidecar whose Ledger insert raises (for example a foreign-key failure against pruned parent rows) was logged and retried on every future session start, forever. It now moves to `<state>/pending/quarantine/<run_id>.json` and logs `reconcile-sidecar-quarantined` with the destination path; `reconcile-sidecar-failed` appears only if the quarantine move itself fails.
 
 **The test suite no longer leaks into real state.** Running pytest appended fixture-run reconcile errors to the ambient project's `.metaensemble/hooks/log.jsonl` and left test markers in the real `~/.metaensemble/state/active-dispatches/`. An autouse fixture now isolates `HOME`/`USERPROFILE` and the hook error log per test; a full-suite run leaves both surfaces byte-identical.
+
+**Manifest scaffold re-detects every memory surface on pre-key projects** (live-test finding). `adopt` never rewrites an existing `install-decisions.yaml`, so projects adopted before the `memory_surfaces` key kept a decisions file without it — and the scaffold's fallback probed only the root `CLAUDE.md`, silently dropping `.claude/CLAUDE.md` from Manifests on exactly the projects that adopted earliest. The fallback now runs the installer's own surface detection.
+
+**doctor C12 no longer depends on the working directory** (live-test finding). The editable-install probe inherited the caller's cwd, so from a source checkout `sys.path[0] = ''` resolved the in-tree `metaensemble.egg-info/` — which never carries `direct_url.json` — ahead of the real dist-info, reporting an editable install as non-editable. The probe now runs from a neutral directory, and the reported source path is URL-decoded.
+
+**doctor C5 warns on recent recurrence, not lifetime volume** (live-test finding). The hook error log is append-only and never rotated, so the old ≥10-lines rule kept C5 in WARN forever once any historical noise accumulated. The verdict now keys on entries inside a 7-day window (unparseable timestamps count as recent — failing toward attention), with lifetime volume reported but not warning.
+
+**`[task:]` markers accept semantic ids** (live-test finding). The marker regex accepted only hex after `task-`, so a Coordinator-written id like `task-livetest-020` silently failed to match and the dispatch lost its shared-Task grouping. The charset is now letters, digits, and dashes.
 
 ### Changed
 

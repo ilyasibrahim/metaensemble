@@ -58,6 +58,14 @@ def test_parse_markers_task():
     assert result["task_id"] == "task-abc123def456"
 
 
+def test_parse_markers_task_accepts_semantic_ids():
+    """Live-test regression (2026-07-03): a hex-only charset silently
+    dropped Coordinator-written semantic ids like `task-livetest-020`,
+    losing the shared-Task grouping the marker exists to create."""
+    result = parse_markers("[task: task-livetest-020] run the check")
+    assert result["task_id"] == "task-livetest-020"
+
+
 def test_parse_markers_all_three():
     prompt = "[manifest: hm-abc123] [continuing: arch-7b3] [task: task-deadbeef0001] go"
     result = parse_markers(prompt)

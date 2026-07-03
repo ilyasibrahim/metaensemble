@@ -297,8 +297,26 @@ def test_check_hook_log_with_few_entries_returns_ok(tmp_path, monkeypatch):
     assert "manifest-validation-failed" in result.detail
 
 
-def test_check_hook_log_many_entries_returns_warn(tmp_path, monkeypatch):
-    """C5 escalates to WARN when ≥10 entries accumulate."""
+def test_check_hook_log_recent_burst_returns_warn(tmp_path, monkeypatch):
+    """C5 escalates to WARN on recurrence inside the recency window."""
+    from datetime import datetime, timezone
+
+    monkeypatch.chdir(tmp_path)
+    log_path = tmp_path / ".metaensemble" / "hooks" / "log.jsonl"
+    log_path.parent.mkdir(parents=True)
+    lines = [
+        json.dumps({"ts": f"2026-07-0{i}T12:00:00+00:00",
+                    "kind": "manifest-validation-failed",
+                    "message": "x", "context": {}})
+        for i in range(1, 4)
+    ]
+    log_path.write_text("\n".join(lines) + "\n")
+    result = check_hook_log(now=datetime(2026, 7, 3, 13, tzinfo=timezone.utc))
+    assert result.status == "WARN"
+
+
+def test_check_hook_log_unparseable_timestamps_count_as_recent(tmp_path, monkeypatch):
+    """Entries whose ts cannot be parsed fail toward attention, not silence."""
     monkeypatch.chdir(tmp_path)
     log_path = tmp_path / ".metaensemble" / "hooks" / "log.jsonl"
     log_path.parent.mkdir(parents=True)
@@ -310,6 +328,29 @@ def test_check_hook_log_many_entries_returns_warn(tmp_path, monkeypatch):
     log_path.write_text("\n".join(lines) + "\n")
     result = check_hook_log()
     assert result.status == "WARN"
+
+
+def test_check_hook_log_historical_noise_stays_ok(tmp_path, monkeypatch):
+    """Live-test regression (2026-07-03): an append-only log full of
+    since-fixed historical errors (e.g. pre-isolation test leakage) must
+    not keep C5 in WARN forever. Only recurrence inside the recency
+    window warns."""
+    from datetime import datetime, timezone
+
+    monkeypatch.chdir(tmp_path)
+    log_path = tmp_path / ".metaensemble" / "hooks" / "log.jsonl"
+    log_path.parent.mkdir(parents=True)
+    lines = [
+        json.dumps({"ts": "2026-06-20T21:00:00+00:00",
+                    "kind": "reconcile-sidecar-failed",
+                    "message": "FOREIGN KEY constraint failed",
+                    "context": {"run_id": "run-001"}})
+        for _ in range(30)
+    ]
+    log_path.write_text("\n".join(lines) + "\n")
+    result = check_hook_log(now=datetime(2026, 7, 3, 13, tzinfo=timezone.utc))
+    assert result.status == "OK"
+    assert "30 lifetime" in result.detail
 
 
 # --- C10: Ledger recording health ---------------------------------------

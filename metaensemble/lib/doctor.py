@@ -525,8 +525,21 @@ def check_project_state() -> CheckResult:
     )
 
 
-def check_hook_log(*, tail: int = 5) -> CheckResult:
-    """C5: Tail the hook error log to surface recurring silent failures."""
+def check_hook_log(
+    *,
+    tail: int = 5,
+    recent_days: int = 7,
+    recent_warn_threshold: int = 3,
+    now: datetime | None = None,
+) -> CheckResult:
+    """C5: Tail the hook error log to surface recurring silent failures.
+
+    The log is append-only and never rotated, so the verdict keys on
+    RECENT recurrence — `recent_warn_threshold` or more entries inside
+    the `recent_days` window — rather than lifetime volume. A log that
+    accumulated noise months ago (e.g. from a since-fixed leak) must not
+    warn forever; a burst this week must.
+    """
     log_path = Path.cwd() / ".metaensemble" / "hooks" / "log.jsonl"
     if not log_path.exists():
         return CheckResult(
@@ -554,15 +567,14 @@ def check_hook_log(*, tail: int = 5) -> CheckResult:
             detail="Hook error log is empty.",
         )
 
-    recent = lines[-tail:]
-    parsed: list[dict] = []
-    for line in recent:
+    all_parsed: list[dict] = []
+    for line in lines:
         try:
-            parsed.append(json.loads(line))
+            all_parsed.append(json.loads(line))
         except json.JSONDecodeError:
             continue
 
-    if not parsed:
+    if not all_parsed:
         return CheckResult(
             check_id="C5",
             title="Hook error log healthy",
@@ -570,14 +582,32 @@ def check_hook_log(*, tail: int = 5) -> CheckResult:
             detail=f"{len(lines)} log line(s) present but none parsed as JSON.",
         )
 
-    # Surface the kinds and timestamps of the last few entries.
-    summary = "; ".join(f"{e.get('ts','?')}: {e.get('kind','?')}" for e in parsed)
-    status = "WARN" if len(lines) >= 10 else "OK"
+    reference = now or datetime.now(timezone.utc)
+    cutoff = reference - timedelta(days=recent_days)
+    recent_entries: list[dict] = []
+    for entry in all_parsed:
+        try:
+            ts = datetime.fromisoformat(str(entry.get("ts", "")))
+            if ts.tzinfo is None:
+                ts = ts.replace(tzinfo=timezone.utc)
+        except (TypeError, ValueError):
+            # Unparseable timestamps count as recent: fail toward attention.
+            recent_entries.append(entry)
+            continue
+        if ts >= cutoff:
+            recent_entries.append(entry)
+
+    status = "WARN" if len(recent_entries) >= recent_warn_threshold else "OK"
+    shown = (recent_entries or all_parsed)[-tail:]
+    summary = "; ".join(f"{e.get('ts','?')}: {e.get('kind','?')}" for e in shown)
     return CheckResult(
         check_id="C5",
         title="Hook error log healthy",
         status=status,
-        detail=f"Last {len(parsed)} of {len(lines)} entries — {summary}",
+        detail=(
+            f"{len(recent_entries)} entr(y/ies) in the last {recent_days} day(s), "
+            f"{len(lines)} lifetime. Last {len(shown)} — {summary}"
+        ),
         remediation=(
             "Read .metaensemble/hooks/log.jsonl. Recurring identical errors point at "
             "a real regression. Fresh-Manifest validation failures are the most common "

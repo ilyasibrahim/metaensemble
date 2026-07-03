@@ -66,12 +66,14 @@ def _memory_surface_paths(project_root: Path) -> list[str]:
 
     Adopted projects record their memory surfaces in
     `.metaensemble/install-decisions.yaml` (written by the installer's
-    inspection); that record is authoritative when present. Projects that
-    were never adopted — or whose decisions file predates the
-    `memory_surfaces` key — fall back to the runtime's primary project
-    memory file, `<project>/CLAUDE.md`. Reads the YAML directly rather
-    than importing the installer so this module stays light for the
-    hook import path.
+    inspection); that record is authoritative when present — including an
+    explicitly empty list. Projects that were never adopted — or whose
+    decisions file predates the `memory_surfaces` key (adopt never
+    rewrites an existing decisions file) — fall back to re-detecting the
+    same surfaces the installer would record, so a pre-key project's
+    scaffold matches what a fresh adoption sees. The YAML is read
+    directly, and the installer import is deferred into the fallback
+    branch, so this module stays light for the hook import path.
     """
     decisions_path = project_root / ".metaensemble" / "install-decisions.yaml"
     if decisions_path.is_file():
@@ -90,9 +92,9 @@ def _memory_surface_paths(project_root: Path) -> list[str]:
                     if surface_path:
                         paths.append(surface_path)
             return paths
-    if (project_root / "CLAUDE.md").is_file():
-        return ["CLAUDE.md"]
-    return []
+    from metaensemble.lib.installer import detect_memory_surfaces
+
+    return [surface.path for surface in detect_memory_surfaces(project_root)]
 
 
 def scaffold_manifest(task: str, *, project: Path | str | None = None) -> str:
