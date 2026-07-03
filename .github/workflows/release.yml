@@ -1,0 +1,65 @@
+# Publishes a tagged release to PyPI via Trusted Publishing (OIDC) — no
+# long-lived API token anywhere. The publish job authenticates through the
+# `pypi` environment; PyPI must have a (pending) publisher configured for
+# owner `ilyasibrahim`, repo `metaensemble`, workflow `release.yml`,
+# environment `pypi`.
+#
+# Release discipline (RELEASE-CHECKLIST.md): artifacts are REBUILT from the
+# tagged commit in this run, `twine check`-ed, and smoke-installed into a
+# clean venv (CLI entry point + eval replay tier) before anything is
+# uploaded. Pre-built dist/ artifacts are never trusted.
+name: Release to PyPI
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing release tag to publish (e.g. v0.2.0)"
+        required: true
+        type: string
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Build wheel and sdist from the tagged commit
+        run: |
+          python -m pip install --upgrade build twine
+          python -m build --outdir dist .
+          python -m twine check dist/*
+      - name: Smoke-install into a clean venv and exercise the CLI
+        run: |
+          python -m venv /tmp/wheel-smoke
+          /tmp/wheel-smoke/bin/pip install dist/*.whl
+          /tmp/wheel-smoke/bin/metaensemble --help > /dev/null
+          cd /tmp && /tmp/wheel-smoke/bin/metaensemble eval --tier replay --cells all
+      - name: Print SHA256 digests
+        run: shasum -a 256 dist/*
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/

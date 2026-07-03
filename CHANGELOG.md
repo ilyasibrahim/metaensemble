@@ -7,6 +7,14 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [Unreleased]
+
+### Added
+
+**PyPI publication via Trusted Publishing.** `.github/workflows/release.yml` publishes tagged releases to PyPI through OIDC (environment `pypi`) with no stored API token. The workflow rebuilds wheel and sdist from the tagged commit, `twine check`s them, smoke-installs the wheel into a clean venv (CLI entry point + eval replay tier), and prints SHA256 digests before uploading — pre-built `dist/` artifacts are never trusted.
+
+---
+
 ## [0.2.0] — 2026-07-03
 
 Brings the implementation to the level of the published article: every

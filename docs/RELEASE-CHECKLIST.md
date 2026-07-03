@@ -83,6 +83,14 @@ strangers install is the artifact we meant to ship."
    Publish SHA256 digests next to the release artifacts. Prefer Sigstore
    signing when the publishing environment has trusted identity available.
 
+   PyPI publication runs through `.github/workflows/release.yml` using
+   Trusted Publishing (OIDC, environment `pypi`) — no API token is stored
+   anywhere. The workflow rebuilds the artifacts from the tagged commit,
+   `twine check`s them, smoke-installs the wheel into a clean venv (CLI
+   entry point + eval replay tier), and prints digests before uploading.
+   It fires on release publication, or on demand for an existing tag:
+   `gh workflow run release.yml -f tag=v<version>`.
+
 8. Verify PyPI from a new virtual environment after upload:
 
    ```bash
