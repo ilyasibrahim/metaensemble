@@ -16,6 +16,11 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Full history + tags: the Suite-A eval tests materialize
+          # workspaces at the pinned v0.2.0 release commit, which a
+          # depth-1 checkout cannot resolve.
+          fetch-depth: 0
 
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
