@@ -135,7 +135,8 @@ metaensemble eval --tier full --allow-live --cells all --seeds 5 --budget-usd 0.
 
 The output report lands in the current working directory at
 `evals/reports/<UTC-date>-<tier>.md` and is linked from
-`PERFORMANCE.md §4` once a cycle ships.
+`PERFORMANCE.md §4`. The first full-tier cycle shipped 2026-07-04 and is
+checked in at `evals/reports/20260704T140844Z-full.md`.
 
 Supported flags:
 

@@ -65,56 +65,85 @@ The evaluation harness exists at `evals/` and is documented in
 | Protocol enforcement (`fanout`/`consensus` N≥2) | Deterministic block in PreToolUse hook; 4 tests. | `metaensemble/tests/test_hooks.py::test_pre_task_rejects_fanout_one` and siblings |
 | Ledger field completeness (role version, model, tool_use, files_touched, deliverable_ref, cache tokens) | Schema migrations 002/003 + transcript walker + file-tool event hook + post-task hook wiring + schema-completeness tests. | `metaensemble/tests/test_ledger_schema_complete.py`, `metaensemble/tests/test_hooks.py::test_file_event_records_files_touched_for_post_task` |
 | Hook security invariants | Pattern + AST audit. | `metaensemble/tests/test_hook_security_invariants.py` |
-| Eval harness | Replay/smoke/full tiers + Wilson CI + pass@budget metrics. Replay has a non-empirical bootstrap cassette pack; smoke/full make live side-effect-free classification-smoke calls. Release confidence requires a fresh live run whose report is linked here. | `metaensemble/tests/test_eval_harness.py`, `evals/cassettes/README.md` |
+| Eval harness | Replay/smoke/full tiers + Wilson CI + pass@budget metrics. The full tier runs Suite-A software tasks live in sandboxed workspaces with graded acceptance; first full cycle shipped 2026-07-04 (320 runs, 8 cells × 8 tasks × 5 seeds — report checked in at `evals/reports/20260704T140844Z-full.md`). | `metaensemble/tests/test_eval_harness.py`, `metaensemble/tests/test_eval_suite_a_e2e.py` |
 | Performance benchmarks | Hook p95 <100ms, ledger query p95 <10ms — `test_perf_hooks.py`, `test_perf_ledger.py`. | CI-gated. |
 
-**Calibrated AI-quality claims are not yet supported.** The harness now
-reports `pass@budget` and `quality_per_1k_tokens` for live smoke/full
-runs. On 2026-07-03, the v0.2.0 release smoke (`MM_full`, 1 seed, the
-12-item smoke set, USD 0.30 cap) scored 12/12 — `pass@budget` 1.000
-(95% CI 0.757–1.000, n=12) with zero failed-run token waste (report
-`evals/reports/20260703T164846Z-smoke.md`, generated locally; the
-prior 2026-05-19 smoke also scored 12/12). That is pipeline evidence,
-not a calibration result and not a baseline superiority result. The claim
-that the ensemble improves quality per token over a single-agent
-baseline remains a product hypothesis until all baseline cells run
-against real Suite-A fixtures and an independently labeled domain set.
+**The quality-per-token claim is now measured — and, at the tested
+budget, not supported against the best single-agent baseline.** The
+first full-tier calibration ran on 2026-07-04: 320 live runs — 8 cells
+(B1–B4 baselines, `MM_full`, three ablations) × 8 Suite-A software
+tasks × 5 seeds — at a USD 0.60 per-run cap, executor `claude-sonnet-5`
+(exact IDs from run payloads), observed cost USD 140.55, report checked
+in at `evals/reports/20260704T140844Z-full.md`. Three findings:
+
+1. **Quality parity, cost penalty.** `MM_full` matches single-agent
+   acceptance quality (33/40 vs 34–35/40 raw pass) but spends 1.55× the
+   tokens of `B4_best_prompt`, so at the cap its `pass@budget` is 0.400
+   (95% CI 0.263–0.554) against B4's 0.800 (95% CI 0.652–0.895). Gate
+   D-8 (overhead ≤ 2.0×) passes; gate D-9 (failed-run waste ≤ 10%)
+   fails at 62.9%. Per this project's own claim discipline, the
+   superiority claim stays unclaimable.
+2. **The primitives are load-bearing within the orchestrated regime.**
+   Every ablation degrades `MM_full`: removing the Manifest collapses
+   `pass@budget` from 0.400 to 0.075 and raw quality from 33/40 to
+   23/40; removing the quality gate, 0.175; removing the Ledger, 0.350.
+3. **Structure beats naive delegation.** The runtime's default-subagent
+   baseline (B3) scores 0.175 — `MM_full` more than doubles it among
+   delegating regimes.
+
+Scope: the eight tasks fit comfortably in a single agent's context —
+the regime where the theory itself predicts orchestration is overhead.
+Whether the coordination premium inverts on work exceeding one context
+is the next measurable hypothesis, not an assumption. The
+domain-classification half of the original condition (an independently
+labeled calibration set for Suite-B-style work) also remains open.
 
 ## Evidence FAQ
 
 ### Do you have evidence MetaEnsemble produces higher-quality outputs?
 
-Not yet at the standard required for a product claim. v0.2.0 has strong
-engineering evidence for the local substrate — install lifecycle, hooks,
-Ledger persistence, protocol guards, replay metrics, and Python
-deliverable checks. It does **not** yet have a calibrated win-rate,
-effect-size estimate, routing-accuracy metric, or per-mode reliability
-metric showing that multi-Executor orchestration beats a strong
-single-agent baseline on quality per token. Treat the quality-per-token
-thesis as the hypothesis the harness is built to measure, not as an
-established result.
+Measured, with scope. The 2026-07-04 full-tier calibration (above)
+shows acceptance-quality **parity** with strong single-agent baselines
+on small software tasks, at a 1.55× token premium that halves
+budget-compliant pass rate at a fixed cap — so the answer to "does it
+beat a strong single agent on quality per token here" is **no** for
+this task class. What the same data does establish, with n=40 per cell:
+the protocol's primitives are individually load-bearing (every ablation
+degrades it, the Manifest most), and the full protocol more than
+doubles the runtime's default-subagent baseline among delegating
+regimes. Still unmeasured: routing accuracy, per-mode (fan-out /
+consensus) reliability, and behavior on work larger than one context —
+none of which may be claimed.
 
 ### What evaluation numbers are required before stronger claims?
 
-At minimum: a fresh live eval with baseline cells and MetaEnsemble cells
-on the same task set, exact model IDs recorded, token estimates compared
-with observed token usage, and the report checked into or linked from
-this system card. A small n=20 release smoke is useful operational
-evidence, but it is still not calibration.
+The 2026-07-04 cycle satisfies the original bar for the software-task
+claim: baseline cells and MetaEnsemble cells on the same task set,
+exact model IDs recorded, and the report checked in. A superiority
+claim would additionally require a task set where D-9 passes and
+`MM_full` leads the best single-agent baseline on `pass@budget` or
+`quality_per_1k_tokens` — plausibly the beyond-one-context regime, which
+needs its own fixture suite. Domain-classification claims still require
+an independently labeled calibration set.
 
 ## Known limitations
 
 ### Calibration
 
-The shipped classification smoke suite has 12 domain-specific classification
-items. This is a **smoke suite**: it confirms the pipeline runs end-to-end.
-It is **not** a calibration set, and it does not define MetaEnsemble's
-product scope. MetaEnsemble is project-agnostic; the smoke suite is one narrow
-fixture used to exercise the harness.
+Software-task calibration is measured (2026-07-04 full-tier cycle,
+above): the results bound what may be claimed — parity with strong
+single-agent baselines at a 1.55× token premium on tasks that fit one
+context, load-bearing primitives, and dominance over naive delegation.
+The tested regime is the theory's own worst case; the beyond-one-context
+regime has no fixture suite yet and nothing about it may be claimed.
 
-Calibration claims require an independently labeled set that matches the
-domain being claimed. Until that exists, any "High confidence" reading from
-the model should be treated as suggestive, not authoritative.
+Domain classification remains uncalibrated. The shipped classification
+smoke suite has 12 items — a **smoke suite** confirming the pipeline
+runs end-to-end, not a calibration set, and it does not define
+MetaEnsemble's product scope. Domain claims require an independently
+labeled set matching the domain being claimed; until that exists, any
+"High confidence" reading from the model should be treated as
+suggestive, not authoritative.
 
 ### Failure-mode catalog
 

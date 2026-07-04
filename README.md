@@ -4,7 +4,7 @@
 
 MetaEnsemble gives every agent a persistent ID, every handoff a schema-validated contract, and every run an entry in an append-only ledger. Multiple agents instantiated from one Role specification execute in parallel. Identities survive across sessions. Token-efficient by construction.
 
-**v0.2.0 status:** feedback-first release. The software records and gates local agent work, but measured quality-per-token improvements remain a product hypothesis until the live evaluation set is larger and fully baseline-comparable. See [SYSTEM-CARD.md](./docs/SYSTEM-CARD.md).
+**v0.2.0 status:** feedback-first release, now with a measured calibration. The first full-tier cycle (320 live runs, 8 cells × 8 software tasks × 5 seeds) found acceptance-quality parity with strong single-agent baselines at a 1.55× token premium on tasks that fit one context, that every protocol primitive is load-bearing (ablations degrade it — the Manifest most), and that the full protocol more than doubles the runtime's default-subagent baseline. No quality-per-token superiority is claimed for this task class. See [SYSTEM-CARD.md](./docs/SYSTEM-CARD.md) and `evals/reports/20260704T140844Z-full.md`.
 
 ---
 
@@ -164,7 +164,7 @@ v0.2.0. All core phases complete and tested:
 - Five-axis deliverable check on successful Runs: pytest, bandit, ruff, radon, and coverage for `.py` deliverables, plus project-configured per-axis commands (`axis_commands` in `quality.yaml`) so non-Python deliverables are checked across the same correctness/security/maintainability/complexity/coverage axes; quality runners ship in the `[test]` extras so CI runs the real tools.
 - Failed-run accounting via the `interrupted` and `budget_exceeded` outcomes (schema migration 002) plus the two-layer reconcile module.
 - Ledger field completeness — every documented Ledger field (Role version, model, tool use, files touched, output, gate state, review findings) is a column with an assertion test.
-- Evaluation harness under `evals/` with replay/smoke/full tiers, Wilson confidence intervals, and `pass@budget` / `quality_per_1k_tokens` / `orchestration_overhead_ratio` metrics. The shipped replay pack is a non-empirical bootstrap fixture. Live smoke/full runs are wired for side-effect-free classification-smoke checks; calibration and baseline-superiority claims still require larger labeled/fixture sets.
+- Evaluation harness under `evals/` with replay/smoke/full tiers, Wilson confidence intervals, and `pass@budget` / `quality_per_1k_tokens` / `orchestration_overhead_ratio` metrics. The full tier runs Suite-A software tasks live in sandboxed per-run workspaces with graded acceptance and honest cell isolation; the first calibration cycle is checked in at `evals/reports/20260704T140844Z-full.md`. Domain-classification calibration still requires an independently labeled set.
 
 v0.2.0 is feedback-first. Issues are welcome; see [CONTRIBUTING.md](./CONTRIBUTING.md) to get started.
 

@@ -122,6 +122,20 @@ For `0.2.0`, public copy may claim:
 - blocked dispatches delivered through the runtime's native permission surface
 - replay/smoke/full evaluation harness mechanics
 
-Public copy must not claim calibrated quality improvement, routing
-accuracy, consensus reliability, or cost-gate calibration until the
-system card links a live report that measures those quantities.
+Additionally claimable since the 2026-07-04 full-tier calibration
+(`evals/reports/20260704T140844Z-full.md`, checked in), with its exact
+scope — 8 single-context software tasks, USD 0.60/run cap, 5 seeds,
+`claude-sonnet-5` executor:
+
+- acceptance-quality parity between `MM_full` and strong single-agent
+  baselines at a measured 1.55× token premium (D-8 pass, D-9 fail)
+- every protocol primitive is load-bearing: ablating the Manifest,
+  quality gate, or Ledger degrades both pass@budget and raw quality
+- the full protocol more than doubles the runtime's default-subagent
+  baseline among delegating regimes
+
+Public copy must NOT claim quality-per-token superiority over a strong
+single-agent baseline (measured and not supported for the tested task
+class), nor routing accuracy, consensus reliability, cost-gate
+calibration, or any beyond-one-context behavior — none of those are
+measured.

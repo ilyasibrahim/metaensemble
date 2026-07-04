@@ -199,6 +199,14 @@ These benchmarks run in CI on every pull request. Failure blocks merge.
 
 Validates the quality-per-token claim — that the system around the model improves output quality relative to token spend.
 
+First full-tier cycle: `evals/reports/20260704T140844Z-full.md`
+(2026-07-04; 320 live runs, 8 cells × 8 Suite-A tasks × 5 seeds).
+Result in one line: quality parity with the best single-agent baseline
+at a 1.55× token premium on single-context tasks (D-8 PASS, D-9 FAIL);
+ablations show every primitive is load-bearing; the full protocol more
+than doubles the default-subagent baseline. The superiority claim is
+not supported for this task class.
+
 - Three baselines (single-agent, single-agent + system prompt, runtime default subagent) plus a best-prompt baseline (B4) that gets the same Manifest pointers and acceptance criteria MetaEnsemble does.
 - Three ablations (`MM − Manifest`, `MM − Ledger`, `MM − quality gate`).
 - N seeds per cell (default 5; smoke tier uses 1).
