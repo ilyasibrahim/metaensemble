@@ -1,7 +1,7 @@
 # MetaEnsemble System Card
 
-Version: 0.2.0
-Last updated: 2026-07-03
+Version: 0.3.0
+Last updated: 2026-07-04
 Author: MetaEnsemble project
 
 This system card sits next to MetaEnsemble's documented capability
@@ -18,7 +18,7 @@ researchers, and small teams who want persistent specialist identities,
 typed handoffs, institutional memory, calibrated escalation, and
 accountable review without standing up a hosted multi-agent platform.
 
-Concrete use cases the v0.2.0 release supports:
+Concrete use cases the v0.3.0 release supports:
 
 - Dispatching one or more Executors of a Role for software-engineering
   tasks (implementation, refactor, review, doc updates, test addition).
@@ -27,7 +27,7 @@ Concrete use cases the v0.2.0 release supports:
 - Recording Run metadata (model, tool use, token cost, files touched,
   outcome) for later audit and continuity.
 - Surface-level dispatch protocols: solo, fanout, consensus, peer
-  review. v0.2.0 validates planning, markers, and guardrails for these
+  review. v0.3.0 validates planning, markers, and guardrails for these
   modes; it does not yet publish a live end-to-end reliability metric for
   each multi-Executor mode.
 - Local cost gating via threshold-based decisions surfaced as
@@ -44,10 +44,10 @@ MetaEnsemble is **not** intended for:
 - High-stakes irreversible decisions without explicit Principal review.
 - Production-scale multi-tenant workloads. The Ledger is SQLite on the
   Principal's machine; concurrent multi-runtime use against the same
-  project is not supported in v0.2.0.
+  project is not supported in v0.3.0.
 - Domain-specific classification or scoring where calibrated confidence is
   required and not yet measured for that domain. MetaEnsemble can route and
-  record such work, but the v0.2.0 eval harness does not certify domain
+  record such work, but the v0.3.0 eval harness does not certify domain
   accuracy.
 - Replacing human specialist judgment on tasks that require tacit
   knowledge, embodied practice, or political/social context that does
@@ -56,7 +56,7 @@ MetaEnsemble is **not** intended for:
 ## Evaluated capabilities
 
 The evaluation harness exists at `evals/` and is documented in
-`evals/README.md`. As of v0.2.0:
+`evals/README.md`. As of v0.3.0:
 
 | Capability | Coverage | Evidence |
 |---|---|---|
@@ -149,7 +149,7 @@ suggestive, not authoritative.
 
 A documented failure-mode catalog for each claimed domain is a deliverable
 of the first full eval cycle. The smoke suite does not exercise enough
-domain variety to support such a catalog in v0.2.0.
+domain variety to support such a catalog in v0.3.0.
 
 ### Model recording
 
@@ -183,7 +183,7 @@ command file is *advisory*: it tells the Coordinator what to do, but
 the Coordinator is a model and can deviate. The PreToolUse guard
 catches the case where the model issues the dispatch anyway. A
 third-line defense (a runtime-level pre-model argument validator)
-would close the remaining gap; the v0.2.0 release does not include
+would close the remaining gap; the v0.3.0 release does not include
 it because the runtime does not expose the necessary hook.
 
 ### Eval budget (D-5, D-8, D-9)
@@ -212,7 +212,7 @@ fixtures and baseline cells are present in the run.
   SubagentStop event cannot finalize background-dispatched Runs at
   subagent stop; those Runs are recovered by the reconcile sweep instead.
 - **Concurrency**: Single-runtime per project. A future protocol may
-  add file-locking around the pending-sidecar directory; v0.2.0 does
+  add file-locking around the pending-sidecar directory; v0.3.0 does
   not.
 - **Local storage**: The Ledger is SQLite + a JSONL mirror under
   `<project>/.metaensemble/state/`. Measured size after 1,000 fully

@@ -4,7 +4,7 @@
 
 MetaEnsemble gives every agent a persistent ID, every handoff a schema-validated contract, and every run an entry in an append-only ledger. Multiple agents instantiated from one Role specification execute in parallel. Identities survive across sessions. Token-efficient by construction.
 
-**v0.2.0 status:** feedback-first release, now with a measured calibration. The first full-tier cycle (320 live runs, 8 cells × 8 software tasks × 5 seeds) found acceptance-quality parity with strong single-agent baselines at a 1.55× token premium on tasks that fit one context, that every protocol primitive is load-bearing (ablations degrade it — the Manifest most), and that the full protocol more than doubles the runtime's default-subagent baseline. No quality-per-token superiority is claimed for this task class. See [SYSTEM-CARD.md](./docs/SYSTEM-CARD.md) and `evals/reports/20260704T140844Z-full.md`.
+**v0.3.0 status:** feedback-first release, now with a measured calibration. The first full-tier cycle (320 live runs, 8 cells × 8 software tasks × 5 seeds) found acceptance-quality parity with strong single-agent baselines at a 1.55× token premium on tasks that fit one context, that every protocol primitive is load-bearing (ablations degrade it — the Manifest most), and that the full protocol more than doubles the runtime's default-subagent baseline. No quality-per-token superiority is claimed for this task class. See [SYSTEM-CARD.md](./docs/SYSTEM-CARD.md) and `evals/reports/20260704T140844Z-full.md`.
 
 ---
 
@@ -154,7 +154,7 @@ See [DEPLOYMENT.md](./docs/DEPLOYMENT.md) for the per-action behaviour and the f
 
 ## Status
 
-v0.2.0. All core phases complete and tested:
+v0.3.0. All core phases complete and tested:
 
 - Typed substrate (Manifest YAML, Brief JSON, Ledger SQLite + JSONL).
 - Lifecycle hooks for SessionStart, PreToolUse, PostToolUse, Write/deliverable-sync, file-tool provenance, SubagentStop (background-dispatch finalization), and Stop, with command-injection invariants enforced by an audit test.
@@ -166,7 +166,7 @@ v0.2.0. All core phases complete and tested:
 - Ledger field completeness — every documented Ledger field (Role version, model, tool use, files touched, output, gate state, review findings) is a column with an assertion test.
 - Evaluation harness under `evals/` with replay/smoke/full tiers, Wilson confidence intervals, and `pass@budget` / `quality_per_1k_tokens` / `orchestration_overhead_ratio` metrics. The full tier runs Suite-A software tasks live in sandboxed per-run workspaces with graded acceptance and honest cell isolation; the first calibration cycle is checked in at `evals/reports/20260704T140844Z-full.md`. Domain-classification calibration still requires an independently labeled set.
 
-v0.2.0 is feedback-first. Issues are welcome; see [CONTRIBUTING.md](./CONTRIBUTING.md) to get started.
+v0.3.0 is feedback-first. Issues are welcome; see [CONTRIBUTING.md](./CONTRIBUTING.md) to get started.
 
 See [PERFORMANCE.md](./docs/PERFORMANCE.md) for the engineering contract and benchmark numbers, [SYSTEM-CARD.md](./docs/SYSTEM-CARD.md) for known limitations and intended-use boundaries, and [SECURITY.md](./SECURITY.md) for the trust model.
 Release publication is gated by [RELEASE-CHECKLIST.md](./docs/RELEASE-CHECKLIST.md).

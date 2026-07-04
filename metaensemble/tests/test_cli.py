@@ -65,10 +65,13 @@ def test_init_force_reinitializes(tmp_path):
     assert code == 0
 
 
-def test_init_with_pack_flag_explains_v0_2_deferral(tmp_path):
+def test_init_with_pack_flag_explains_deferral(tmp_path):
+    """--pack is accepted but explains the deferral. The old assertion
+    checked for a version string that the init notice also contained,
+    so it kept passing after the pack message stopped naming a version."""
     code, out, _ = _invoke_cli(tmp_path, "init", "--pack", "ml")
     assert code == 0
-    assert "v0.2.0" in out
+    assert "reserved for a future release" in out
 
 
 def test_limits_subcommand(tmp_path):

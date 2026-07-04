@@ -1,6 +1,6 @@
 # MetaEnsemble Release Checklist
 
-This checklist is the gate for publishing a release to PyPI (current: `0.2.0`). It exists to
+This checklist is the gate for publishing a release to PyPI (current: `0.3.0`). It exists to
 close the gap between "the source tree passes tests" and "the artifact
 strangers install is the artifact we meant to ship."
 
@@ -11,7 +11,7 @@ strangers install is the artifact we meant to ship."
    ```bash
    python -m build
    python -m venv /tmp/metaensemble-wheel-smoke
-   /tmp/metaensemble-wheel-smoke/bin/python -m pip install dist/metaensemble-0.2.0-py3-none-any.whl
+   /tmp/metaensemble-wheel-smoke/bin/python -m pip install dist/metaensemble-0.3.0-py3-none-any.whl
    /tmp/metaensemble-wheel-smoke/bin/metaensemble --help
    /tmp/metaensemble-wheel-smoke/bin/metaensemble eval --tier replay --cells all
    ```
@@ -77,7 +77,7 @@ strangers install is the artifact we meant to ship."
 7. Publish release integrity data:
 
    ```bash
-   shasum -a 256 dist/metaensemble-0.2.0*
+   shasum -a 256 dist/metaensemble-0.3.0*
    ```
 
    Publish SHA256 digests next to the release artifacts. Prefer Sigstore
@@ -95,7 +95,7 @@ strangers install is the artifact we meant to ship."
 
    ```bash
    python -m venv /tmp/metaensemble-pypi-smoke
-   /tmp/metaensemble-pypi-smoke/bin/python -m pip install metaensemble==0.2.0
+   /tmp/metaensemble-pypi-smoke/bin/python -m pip install metaensemble==0.3.0
    /tmp/metaensemble-pypi-smoke/bin/metaensemble --version
    /tmp/metaensemble-pypi-smoke/bin/metaensemble eval --tier replay --cells all
    ```
@@ -109,7 +109,7 @@ and prints the wheel SHA256 digest.
 
 ## Claim Discipline
 
-For `0.2.0`, public copy may claim:
+For `0.3.0`, public copy may claim:
 
 - persistent Executor identity
 - typed Manifests and strict Briefs

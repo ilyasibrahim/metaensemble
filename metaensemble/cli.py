@@ -17,7 +17,7 @@ from pathlib import Path
 
 CORE_DIR = Path(__file__).resolve().parent
 EXPERIMENTAL_NOTICE = (
-    "MetaEnsemble v0.2.0 is feedback-first software. Its first full-tier "
+    "MetaEnsemble v0.3.0 is feedback-first software. Its first full-tier "
     "calibration measured quality parity with strong single-agent baselines "
     "at a 1.55x token premium on single-context tasks; no quality-per-token "
     "superiority is claimed for that class. See docs/SYSTEM-CARD.md."

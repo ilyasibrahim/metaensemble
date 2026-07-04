@@ -7,7 +7,11 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [Unreleased]
+## [0.3.0] — 2026-07-04
+
+The calibration release: the quality-per-token wager is now a measured
+result instead of an argument, and every claim surface states exactly
+what the data supports.
 
 ### Added
 
