@@ -19,6 +19,10 @@ _internal/
 reports/
 evals/reports/
 
+# Live Suite-A eval workspaces and run manifests — per-run scratch state
+# kept for post-hoc inspection, never source.
+evals/workdir/
+
 .pytest_cache/
 .ruff_cache/
 .coverage

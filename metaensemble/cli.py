@@ -874,6 +874,15 @@ def cmd_eval(args: argparse.Namespace) -> int:
         for it in suite_b["items"]
     ]
 
+    suite_sel = getattr(args, "suite", "all") or "all"
+    if tier == Tier.SMOKE and suite_sel == "a":
+        print(
+            "--suite a is not available on the smoke tier; the smoke suite is "
+            "the Suite-B classification set. Use --tier full for live Suite-A runs.",
+            file=sys.stderr,
+        )
+        return 2
+
     seeds = args.seeds if args.seeds is not None else (
         1 if tier == Tier.SMOKE else int(config["cycle"]["seeds"])
     )
@@ -911,6 +920,12 @@ def cmd_eval(args: argparse.Namespace) -> int:
             print(f"Unknown eval cell(s): {', '.join(sorted(missing))}", file=sys.stderr)
             return 2
 
+    replay_tasks = []
+    if suite_sel in ("a", "all"):
+        replay_tasks.extend(suite_a_tasks)
+    if suite_sel in ("b", "all"):
+        replay_tasks.extend(suite_b_tasks)
+
     if tier == Tier.REPLAY:
         cassette_dir = evals_root / "cassettes"
         cells_with_outcomes = []
@@ -918,7 +933,7 @@ def cmd_eval(args: argparse.Namespace) -> int:
             try:
                 outcomes = run_cell_replay(
                     cell,
-                    suite_a_tasks + suite_b_tasks,
+                    replay_tasks,
                     cassette_dir,
                     seeds=seeds,
                 )
@@ -959,22 +974,58 @@ def cmd_eval(args: argparse.Namespace) -> int:
         # without mutating the project. Full is allowed only with explicit
         # confirmation; Suite A tasks with deferred fixture SHAs are skipped and
         # named in the report rather than fabricated.
+        # Suite A runs live only on the full tier, only for tasks whose
+        # starting_sha is resolved (deferred rows stay skipped-and-named).
+        suite_a_live_tasks = []
+        run_suite_a = tier == Tier.FULL and suite_sel in ("a", "all")
+        if run_suite_a:
+            from evals.runners.suite_a import SuiteATask, run_suite_a_live
+            suite_a_live_tasks = [
+                SuiteATask(
+                    id=t["id"],
+                    description=t["description"],
+                    acceptance=t.get("acceptance", []),
+                    starting_repo=t["starting_repo"],
+                    starting_sha=str(t.get("starting_sha", "")),
+                    title=t.get("title", ""),
+                )
+                for t in suite_a["tasks"]
+                if not str(t.get("starting_sha", "")).startswith("__DEFERRED__")
+            ]
+        suite_a_workdir = Path.cwd() / "evals" / "workdir"
+        executor_model = str(
+            (config["cycle"].get("model_routing") or {}).get("executor")
+            or "sonnet"
+        )
+
         print(f"=== Eval pre-flight ({tier.value}) ===")
         print(f"Cells   : {len(cells)}")
-        print(f"Suite A : {0 if tier == Tier.SMOKE else len(suite_a_tasks)} tasks")
-        print(f"Suite B : {len(suite_b_tasks)} items (smoke set)")
+        print(f"Suite A : {len(suite_a_live_tasks)} tasks (live)")
+        print(f"Suite B : {len(suite_b_tasks) if suite_sel in ('b', 'all') else 0} items (smoke set)")
         print(f"Seeds   : {seeds}")
         print(f"Budget  : USD {budget_usd:.2f} per run")
         print()
         cells_with_outcomes = []
         for cell in cells:
-            outcomes = run_suite_b_live_claude(
-                cell,
-                suite_b_tasks,
-                seeds=seeds,
-                budget_usd=budget_usd,
-                cwd=Path.cwd(),
-            )
+            outcomes = []
+            if suite_sel in ("b", "all"):
+                outcomes.extend(run_suite_b_live_claude(
+                    cell,
+                    suite_b_tasks,
+                    seeds=seeds,
+                    budget_usd=budget_usd,
+                    cwd=Path.cwd(),
+                ))
+            if suite_a_live_tasks:
+                outcomes.extend(run_suite_a_live(
+                    cell,
+                    suite_a_live_tasks,
+                    seeds=seeds,
+                    budget_usd=budget_usd,
+                    workdir=suite_a_workdir,
+                    repo_root=package_root,
+                    model=executor_model,
+                ))
             cells_with_outcomes.append((cell, outcomes))
         b4_tokens = next(
             (
@@ -1028,6 +1079,14 @@ def cmd_eval(args: argparse.Namespace) -> int:
                     "Suite A live tasks skipped because their fixture SHAs are "
                     f"deferred: {', '.join(deferred_suite_a)}."
                 )
+            if suite_a_live_tasks:
+                report.notes.append(
+                    f"Suite A live runs: {len(suite_a_live_tasks)} tasks × "
+                    f"{seeds} seeds per cell; workspaces kept under "
+                    f"{suite_a_workdir} (see run-manifest.jsonl)."
+                )
+            elif suite_sel == "b":
+                report.notes.append("Suite A excluded by --suite b.")
 
     gate_failed = False
     reporting = config.get("reporting") or {}
@@ -1307,6 +1366,11 @@ def main(argv: list[str] | None = None) -> int:
     p_eval.add_argument(
         "--cells", type=str, default=None,
         help="Comma-separated cell ids or `all`. Defaults: replay/full all, smoke MM_full.",
+    )
+    p_eval.add_argument(
+        "--suite", choices=["a", "b", "all"], default="all",
+        help="Task suite selection. `a` = software-engineering tasks (live on "
+             "the full tier only), `b` = classification smoke set, `all` = both.",
     )
     p_eval.add_argument(
         "--seeds", type=int, default=None,

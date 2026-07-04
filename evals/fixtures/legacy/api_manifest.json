@@ -1,0 +1,20 @@
+{
+  "legacy.big_module": [
+    "FieldSpec",
+    "ParseError",
+    "Record",
+    "Schema",
+    "ValidationIssue",
+    "coerce_value",
+    "from_dict",
+    "parse_document",
+    "parse_record",
+    "render_document",
+    "render_record",
+    "render_summary",
+    "render_table",
+    "to_dict",
+    "validate_document",
+    "validate_record"
+  ]
+}

@@ -23,19 +23,25 @@ evals/
 │   └── suite_b/               # domain-specific classification smoke set
 │       ├── README.md
 │       └── items.yaml
-├── baselines/                 # B1 / B2 / B3 baseline definitions
-│   ├── b1_single_agent.yaml
-│   ├── b2_single_agent_prompted.yaml
-│   ├── b3_subagent_default.yaml
-│   └── b4_best_prompt.yaml    # best-single-agent baseline
+├── fixtures/                  # deterministic Suite-A fixture repos
+│   ├── build.py               # single-commit builder; SHAs identical on every
+│   │                          # machine (pinned author/committer/date)
+│   ├── paginator/             # oss-fixture-paginator source tree
+│   └── legacy/                # oss-fixture-legacy source tree
 ├── cassettes/                 # replay fixtures; bootstrap pack is non-empirical
 ├── runners/                   # cell × seed executors
 │   ├── __init__.py
-│   ├── api.py                 # tiered runner: replay / live / smoke
-│   ├── metrics.py             # Wilson CI, pass@budget, quality_per_1k_tokens
-│   └── replay.py              # cassette-based PR runner
+│   ├── api.py                 # tiered dispatch: replay / live smoke (suite B)
+│   ├── suite_a.py             # live Suite-A: sandboxed workspaces, per-cell
+│   │                          # prompts, hook isolation via --setting-sources
+│   ├── acceptance.py          # graded acceptance checkers (build, tests, lint,
+│   │                          # API surface, links, perf, CI matrix)
+│   └── metrics.py             # Wilson CI, pass@budget, quality_per_1k_tokens
 └── reports/                   # generated reports per cycle (gitignored)
 ```
+
+The cell matrix (B1–B4 baselines, `MM_full`, three ablations) is defined
+in `configs/default.yaml`, not in separate baseline files.
 
 ## Tiered evaluation
 
@@ -54,7 +60,7 @@ The release ships a compact `evals/cassettes/bootstrap.jsonl` pack so the
 replay tier works in a clean checkout. That pack is deliberately marked
 non-empirical; it verifies the harness mechanics, not MetaEnsemble's
 quality claim. Live smoke/full reports are empirical for the cells and
-datasets actually run; the report notes any skipped deferred fixtures.
+datasets actually run.
 
 ## Headline metrics
 
@@ -88,10 +94,18 @@ open-source repos. Each task has:
 
 See `evals/datasets/suite_a/tasks.yaml` for the current set.
 
-The current Suite-A rows still contain deferred fixture SHAs. The live
-full tier names those skipped tasks in the report rather than treating
-them as passed or failed. Release certification across software tasks
-requires replacing the deferred SHAs with real fixture repositories.
+Every Suite-A row pins a resolved starting SHA: tasks a1/a2 pin the
+deterministic fixture commits from `evals/fixtures/build.py` (the builder
+produces byte-identical trees and therefore identical SHAs on every
+machine), and tasks a3–a8 pin the v0.2.0 release commit of this
+repository, with each description verified true at that SHA. Live runs
+materialize a fresh sandbox workspace per cell × task × seed (local
+clones only — no network), grade the result with
+`evals/runners/acceptance.py`, and keep every workspace on disk beside a
+`run-manifest.jsonl` for post-hoc inspection. Baseline cells run with
+`--setting-sources project,local` so the user-level MetaEnsemble hooks
+are excluded; MM cells run with all setting sources — the cell
+difference is the real orchestration layer, not only the prompt.
 
 ## Suite B — domain-specific classification (12 items, *smoke only*)
 

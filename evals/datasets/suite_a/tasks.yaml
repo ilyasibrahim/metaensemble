@@ -4,6 +4,14 @@
 # criteria. The starting state is a frozen Git SHA so re-runs are
 # reproducible; the acceptance criteria are executed by `runners/api.py`
 # after the cell's deliverable lands.
+#
+# Starting states:
+# - `oss-fixture-*` repos are materialized by `evals/fixtures/build.py`;
+#   their SHAs are the deterministic single-commit values in
+#   `evals.fixtures.build.FIXTURE_SHAS`.
+# - `metaensemble` tasks pin the v0.2.0 release commit
+#   (`git rev-parse v0.2.0^{commit}`). Every description below was
+#   reconciled against that tree.
 
 tasks:
   - id: a1_bugfix_off_by_one
@@ -13,7 +21,7 @@ tasks:
       expected on every page boundary. Locate and fix the bug; add a
       regression test.
     starting_repo: oss-fixture-paginator
-    starting_sha: __DEFERRED__
+    starting_sha: cbb6c2178af85ab778dd215379bf0928b6e52268
     acceptance:
       - kind: build_passes
       - kind: test_count_at_least
@@ -25,12 +33,14 @@ tasks:
         path: test_pagination.py
 
   - id: a2_refactor_module
-    title: Split a 600-line module into three cohesive files
+    title: Split a 680-line module into three cohesive files
     description: |
-      The module `legacy/big_module.py` (612 lines) has three responsibilities.
-      Split it into three files preserving the public API. No behavior change.
+      The module `legacy/big_module.py` (680 lines) has three
+      responsibilities: parsing, validation, and rendering of the
+      recfile record format. Split it into three files preserving the
+      public API listed in `api_manifest.json`. No behavior change.
     starting_repo: oss-fixture-legacy
-    starting_sha: __DEFERRED__
+    starting_sha: c04afa1fb995fc47c53a7336dcb5873c4a4bdeb4
     acceptance:
       - kind: build_passes
       - kind: test_count_at_least
@@ -38,27 +48,33 @@ tasks:
       - kind: api_surface_preserved
 
   - id: a3_doc_update
-    title: Document split rollback commands in USER-GUIDE
+    title: Document rollback verification in the USER-GUIDE
     description: |
-      The CLI has separate project and user rollback commands:
-      `metaensemble unadopt --purge-state` and
-      `metaensemble user-teardown --purge-state`. Add a paragraph to
-      USER-GUIDE.md under the rollback section.
+      The "When all else fails — recovery" section of `docs/USER-GUIDE.md`
+      lists the split rollback commands (`metaensemble unadopt
+      --purge-state`, `metaensemble user-teardown --purge-state`) but
+      never tells the reader how to confirm a completed rollback.
+      `docs/DEPLOYMENT.md` covers this under "Verifying the rollback".
+      Add a short paragraph to the recovery section of
+      `docs/USER-GUIDE.md` explaining how to verify both rollback
+      scopes, with a link to the DEPLOYMENT.md section.
     starting_repo: metaensemble
-    starting_sha: __DEFERRED__
+    starting_sha: 27ac404d80312028eff49a5dca3a04338ff8f8ed
     acceptance:
       - kind: markdown_links_resolve
       - kind: file_modified
-        path: USER-GUIDE.md
+        path: docs/USER-GUIDE.md
 
   - id: a4_test_addition
-    title: Add tests for the reconcile module
+    title: Add a reconcile provenance test
     description: |
-      The `metaensemble.lib.reconcile` module has 8 tests covering Layer-1 and
-      Layer-2 reconcile. Add a test that asserts a sidecar's
-      `manifest_id` survives reconciliation into the Run row.
+      `metaensemble/tests/test_reconcile.py` has 20 tests covering
+      session and stale reconciliation. Reconciliation copies a pending
+      sidecar's `brief_in_path` into the recorded Run row, but no test
+      asserts it. Add a test that asserts a sidecar's `brief_in_path`
+      survives reconciliation into the Run row.
     starting_repo: metaensemble
-    starting_sha: __DEFERRED__
+    starting_sha: 27ac404d80312028eff49a5dca3a04338ff8f8ed
     acceptance:
       - kind: build_passes
       - kind: test_count_delta_at_least
@@ -67,14 +83,16 @@ tasks:
         path: metaensemble/tests/test_reconcile.py
 
   - id: a5_design_review
-    title: Review the uninstall-mode design
+    title: Review the uninstall and rollback design
     description: |
-      Read the "Uninstall modes" and "Recovery and rollback" sections of
-      DEPLOYMENT.md and produce a one-page review
-      (`reports/<date>-uninstall-review.md`) naming at least three risks
-      the documented design does not address.
+      Read the "Recovery and rollback" section of `docs/DEPLOYMENT.md`,
+      including its "Verifying the rollback" and "Full local rollback
+      after live testing" subsections, and produce a one-page review at
+      `reports/<date>-uninstall-review.md` naming at least three risks
+      the documented design does not address. Create the workspace-local
+      `reports/` directory if it does not exist.
     starting_repo: metaensemble
-    starting_sha: __DEFERRED__
+    starting_sha: 27ac404d80312028eff49a5dca3a04338ff8f8ed
     acceptance:
       - kind: file_exists
         glob: reports/*-uninstall-review.md
@@ -82,42 +100,58 @@ tasks:
         value: 300
 
   - id: a6_security_review
-    title: Security-review the new transcript walker
+    title: Security-review the transcript walker
     description: |
-      The new `metaensemble/lib/transcript.py` reads JSONL from `transcript_path`.
-      Write `reports/<date>-transcript-security.md` listing every defensive
-      assumption and one concrete attack the walker survives.
+      `metaensemble/lib/transcript.py` reads the runtime's session
+      transcript JSONL from the hook-supplied `transcript_path`. Write
+      `reports/<date>-transcript-security.md` listing every defensive
+      assumption the walker makes and one concrete attack it survives.
+      Create the workspace-local `reports/` directory if it does not
+      exist.
     starting_repo: metaensemble
-    starting_sha: __DEFERRED__
+    starting_sha: 27ac404d80312028eff49a5dca3a04338ff8f8ed
     acceptance:
       - kind: file_exists
         glob: reports/*-transcript-security.md
 
   - id: a7_perf_tune
-    title: Tune `get_window_burn` to <5ms p95 on 100k Runs
+    title: Tighten the get_window_burn p95 budget
     description: |
-      Current p95 is 9ms on 100k Runs. Add the missing index and assert the
-      new p95 in `metaensemble/tests/test_perf_ledger.py`.
+      `metaensemble/tests/test_perf_ledger.py` benchmarks
+      `get_window_burn` against the module-wide 10ms p95 budget on a
+      10k-row Ledger, and `idx_runs_window` already keeps the query
+      indexed. Measure the actual headroom, then tighten
+      `test_get_window_burn_meets_p95` to assert a dedicated 5ms p95
+      budget for `get_window_burn` without loosening any other
+      benchmark's budget.
     starting_repo: metaensemble
-    starting_sha: __DEFERRED__
+    starting_sha: 27ac404d80312028eff49a5dca3a04338ff8f8ed
     acceptance:
       - kind: build_passes
       - kind: perf_benchmark_passes
         benchmark: test_get_window_burn_meets_p95
+      - kind: file_modified
+        path: metaensemble/tests/test_perf_ledger.py
 
   - id: a8_infra_change
     title: Add the no-quality CI matrix axis
     description: |
-      The CI workflow should run pytest a second time with the quality
-      runners absent. Update `.github/workflows/ci.yml` and
-      add `@pytest.mark.requires_radon` / `requires_bandit` markers to
-      the tests that need them.
+      `.github/workflows/ci.yml` runs one test job over a
+      python-version matrix, and every leg installs the quality
+      runners (ruff, bandit, radon) via the `[test]` extra. Add a
+      `no-quality` matrix axis that runs pytest a second time with the
+      quality runners absent, and add `@pytest.mark.requires_radon` /
+      `requires_bandit` markers to the tests that need those tools so
+      the new leg can deselect them.
     starting_repo: metaensemble
-    starting_sha: __DEFERRED__
+    starting_sha: 27ac404d80312028eff49a5dca3a04338ff8f8ed
     acceptance:
       - kind: ci_yaml_has_matrix_axis
         axis: no-quality
 
-# Per W8 sign-off, every starting_sha resolves to a real commit before
-# the harness ships its first benchmark. The __DEFERRED__ values are
-# placeholders so the test-time loader does not need a network round-trip.
+# Every starting_sha above is a resolved, frozen commit: a1/a2 pin the
+# deterministic fixture commits built by `evals/fixtures/build.py`
+# (FIXTURE_SHAS), and a3-a8 pin the v0.2.0 release commit. The loader
+# needs no network round-trip, and
+# `metaensemble/tests/test_eval_fixtures.py` gates this file against
+# placeholder or drifted SHAs.

@@ -11,6 +11,8 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+**Live Suite-A evaluation machinery** (issue #1 groundwork). The eight software-engineering eval tasks now run live: `evals/fixtures/build.py` materializes two deterministic fixture repositories (`oss-fixture-paginator`, `oss-fixture-legacy`) whose single-commit SHAs are identical on every machine, and tasks a3–a8 pin the v0.2.0 release commit with every description verified true at that SHA (three tasks were reshaped where the original claims had drifted). `evals/runners/acceptance.py` grades eleven acceptance-criterion kinds with a fractional quality score; `evals/runners/suite_a.py` sandboxes each cell × task × seed into a fresh local-clone workspace, differentiates cells honestly — baselines run with `--setting-sources project,local` so the user-level MetaEnsemble hooks are excluded, MM cells run with all sources — and keeps every workspace plus a `run-manifest.jsonl` for post-hoc inspection. `metaensemble eval --tier full` gains a `--suite` flag. No calibration claim changes until the full run ships its report.
+
 **PyPI publication via Trusted Publishing.** `.github/workflows/release.yml` publishes tagged releases to PyPI through OIDC (environment `pypi`) with no stored API token. The workflow rebuilds wheel and sdist from the tagged commit, `twine check`s them, smoke-installs the wheel into a clean venv (CLI entry point + eval replay tier), and prints SHA256 digests before uploading — pre-built `dist/` artifacts are never trusted.
 
 ---
