@@ -405,6 +405,7 @@ def run_suite_a_live(
     repo_root: Path,
     model: str,
     claude_extra_args: Sequence[str] | None = None,
+    seed_start: int = 0,
 ) -> list[RunOutcome]:
     """Run one Suite-A cell live: seeds × tasks, one `claude -p` call per run.
 
@@ -426,7 +427,12 @@ def run_suite_a_live(
 
     outcomes: list[RunOutcome] = []
     for task in tasks:
-        for seed in range(seeds):
+        # seed_start lets a multi-session cycle resume where a prior batch
+        # stopped (e.g. a 1-seed pilot becomes seed 0 of the full run)
+        # without re-buying completed seeds. The seed is a repetition
+        # index only — it never enters the prompt — so batches are
+        # statistically interchangeable.
+        for seed in range(seed_start, seed_start + seeds):
             workspace = materialize_workspace(
                 task, workdir, repo_root,
                 run_id=f"{cell_id}/{task.id}/seed{seed}",
@@ -469,6 +475,7 @@ def run_suite_a_live(
             cost_usd = 0.0
             tokens_in = 0
             tokens_out = 0
+            exact_models: list[str] = []
             if claude_error is None:
                 if not stdout.strip() and exit_code != 0:
                     claude_error = (stderr or "claude_failed").strip()[:500]
@@ -478,6 +485,11 @@ def run_suite_a_live(
                         duration_ms = float(payload.get("duration_ms") or 0.0)
                         cost_usd = float(payload.get("total_cost_usd") or 0.0)
                         tokens_in, tokens_out = _tokens_from_claude_payload(payload)
+                        # The report must record exact model IDs; the CLI
+                        # accepts aliases, so the payload's modelUsage keys
+                        # are the only authoritative source.
+                        if isinstance(payload.get("modelUsage"), dict):
+                            exact_models = sorted(payload["modelUsage"].keys())
                         if exit_code != 0 or payload.get("is_error"):
                             errors = payload.get("errors") or []
                             claude_error = (
@@ -533,6 +545,8 @@ def run_suite_a_live(
                     "workspace": str(workspace),
                     "sha": start_sha,
                     "model": str(model),
+                    "exact_models": exact_models,
+                    "cost_usd": cost_usd,
                     "exit": exit_code,
                 }) + "\n")
     return outcomes
