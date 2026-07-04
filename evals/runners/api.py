@@ -506,7 +506,10 @@ def render_report(report: HarnessReport) -> str:
         )
         lines.append(
             f"| `{c.cell_id}` | {c.pass_at_budget} | "
-            f"{c.quality_per_1k_tokens:.2f} | {overhead} | "
+            # Three significant figures, not fixed decimals: suite-B smoke
+            # calls score ~0.2/1k while token-heavy suite-A runs score
+            # ~0.003/1k, and a fixed .2f renders the latter as 0.00.
+            f"{c.quality_per_1k_tokens:.3g} | {overhead} | "
             f"{c.failed_run_token_waste:,} | "
             f"{c.time_to_useful_deliverable_ms_p50:.0f} |"
         )
