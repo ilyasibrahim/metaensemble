@@ -441,6 +441,13 @@ def run_suite_a_live(
                 "--max-budget-usd", f"{budget_usd:.4f}",
                 "--model", str(model),
                 "--no-session-persistence",
+                # Print mode cannot answer permission prompts, so without an
+                # explicit mode every file edit is silently denied and each
+                # cell degrades to prose-only (verified live, 2026-07-04:
+                # a Write in a bare `claude -p` fails; with bypass it lands).
+                # The workspace is a throwaway sandbox clone, which is what
+                # makes bypass an acceptable permission posture here.
+                "--permission-mode", "bypassPermissions",
                 *_claude_isolation_args(cell),
                 *(list(claude_extra_args) if claude_extra_args else []),
                 prompt,

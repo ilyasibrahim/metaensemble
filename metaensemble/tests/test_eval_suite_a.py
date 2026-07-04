@@ -490,6 +490,10 @@ def test_run_suite_a_live_end_to_end_wiring(fake_acceptance, fake_claude, tmp_pa
     model_index = cmd.index("--model")
     assert cmd[model_index + 1] == "test-model"
     assert "--no-session-persistence" in cmd
+    # Print mode denies every edit without an explicit permission mode
+    # (live finding, 2026-07-04) — the sandbox justifies bypass.
+    perm_index = cmd.index("--permission-mode")
+    assert cmd[perm_index + 1] == "bypassPermissions"
     sources_index = cmd.index("--setting-sources")
     assert cmd[sources_index + 1] == "user,project,local"  # MM cell keeps hooks
     assert "--verbose" in cmd  # claude_extra_args pass-through
