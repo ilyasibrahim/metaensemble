@@ -291,6 +291,8 @@ Telemetry labels are deliberately literal. `of plan used` appears only when the 
 
 Resume a prior Executor's thread across sessions. Aliases are short and Role-prefixed (`arch-7b3`, `be-9c1`); you learn them from `/standup`, `/executors`, or from a Deliverable's byline. The cheap default loads the Executor's last Brief and the summary of its last Deliverable, which is usually enough for most resumptions. `--full` reads the entire prior Deliverable and every prior Brief in the Executor's Run history; the cost grows with history length, so use sparingly. Use `/relaunch` when you want continuity by Executor — picking up the same colleague's thread — rather than spinning up a fresh Executor of the same Role.
 
+One accounting nuance worth knowing: a Run row is stamped by the dispatch hooks, so only dispatched work lands in the Ledger. Continuing inside a resumed session (the runtime's own resume, as opposed to `/relaunch`, which dispatches a fresh Run) creates no new rows, and an Executor's Ledger trail can therefore understate a day spent in warm follow-up rounds. The durable record of that work lives in the artifacts it produced — commits, Manifests, Deliverables — rather than in additional Run rows.
+
 #### `/executors`
 
 Lists Executors active in the last thirty days, with alias, Role, status, when last seen, and most recent Run. Reach for it when you want to know "who is on the roster" — before deciding whether to `/relaunch` an existing thread or `/dispatch` a fresh Executor. Also useful as a sanity check that the roster is not bloating; if you see Executors you do not recognize or remember dispatching, that is a signal worth investigating.

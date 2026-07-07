@@ -113,6 +113,8 @@ The Deliverable channel is full prose because humans read it. The Brief channel 
 
 The append-only record of every Run. Every Run lands in both stores at PostToolUse. SQLite serves queries (`/ledger top-burn this-week`); JSONL serves replay if the database is lost or migrated.
 
+The Ledger records dispatched Runs, and only those: work continued inside a resumed session stamps no new rows, so an Executor's trail bounds its dispatch history rather than its total activity. Commits, Manifests, and Deliverables carry the record of non-dispatched work.
+
 ### Registry
 **Shape:** Logical view assembled from `executors`, `tasks`, and recent `runs`.
 **Location:** Computed from SQLite on demand; surfaced via `/executors`, `/standup`.
