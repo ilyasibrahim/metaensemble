@@ -90,6 +90,16 @@ def cmd_ledger(args: argparse.Namespace) -> int:
     return ledger.main(args.subargs)
 
 
+def cmd_mcp_serve(_: argparse.Namespace) -> int:
+    """Serve the read-only Ledger over MCP (stdio) for any MCP client.
+
+    The `mcp` SDK is an optional dependency; `run_stdio` prints a crisp
+    `install metaensemble[mcp]` hint and returns non-zero when it is absent.
+    """
+    from metaensemble.mcp.server import run_stdio
+    return run_stdio() or 0
+
+
 def cmd_hook(args: argparse.Namespace) -> int:
     """Invoke a hook script by filename. Used by the resilient launcher.
 
@@ -1171,6 +1181,13 @@ def main(argv: list[str] | None = None) -> int:
     p_ledger = sub.add_parser("ledger", help="Query the Ledger (see `ledger --help`)")
     p_ledger.add_argument("subargs", nargs=argparse.REMAINDER)
     p_ledger.set_defaults(func=cmd_ledger)
+
+    p_mcp_serve = sub.add_parser(
+        "mcp-serve",
+        help="Serve the read-only Ledger over MCP (stdio) for any MCP client "
+             "(needs the `mcp` extra: pip install 'metaensemble[mcp]')",
+    )
+    p_mcp_serve.set_defaults(func=cmd_mcp_serve)
 
     p_hook = sub.add_parser(
         "hook",

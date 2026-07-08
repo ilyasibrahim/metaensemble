@@ -30,6 +30,17 @@ test = [
   "coverage>=7.0",    # coverage delta — line-coverage report (local)
   "build>=1.0",       # wheel build — used by test_wheel_smoke
   "tomli>=2.0; python_version < '3.11'",  # tomllib backport — used by test_cli
+  "mcp>=1.2",         # MCP SDK — exercises test_mcp_server (server wiring) in CI
+]
+
+# `[mcp]` adds the Model Context Protocol Python SDK, required only by the
+# optional read-only Ledger MCP server (`metaensemble mcp-serve` and the
+# `metaensemble-mcp` console script). The default install stays
+# jsonschema + pyyaml; MCP is opt-in, so non-MCP users carry no extra
+# dependency. Floor pinned to the release line that ships the high-level
+# FastMCP API (`mcp.server.fastmcp`); validated against 1.28.1.
+mcp = [
+  "mcp>=1.2",         # Model Context Protocol Python SDK (FastMCP high-level API)
 ]
 
 # `[quality]` is the production runtime profile for the quality gate.
@@ -46,6 +57,9 @@ quality = [
 
 [project.scripts]
 metaensemble = "metaensemble.cli:main"
+# Read-only Ledger MCP server over stdio. Needs the `[mcp]` extra; without it
+# the entry point prints an install hint and exits non-zero (no traceback).
+metaensemble-mcp = "metaensemble.mcp.server:run_stdio"
 
 [tool.setuptools]
 include-package-data = false

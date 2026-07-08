@@ -152,6 +152,47 @@ See [DEPLOYMENT.md](./docs/DEPLOYMENT.md) for the per-action behaviour and the f
 
 ---
 
+## Reading the Ledger from any MCP client
+
+The Ledger is institutional memory, and it should be readable from wherever you work. `metaensemble mcp-serve` exposes it over the Model Context Protocol (stdio): nine read-only tools (`recent_runs`, `runs_by_executor`, `runs_by_task`, `active_executors`, `executor_detail`, `outcome_counts`, `top_executors`, `window_burn`, `ledger_stats`) plus a `ledger://stats` resource. There is no write surface — the server opens SQLite in `mode=ro`, so no client can mutate the memory it reads.
+
+The MCP SDK is an optional dependency; the default install carries nothing extra:
+
+```bash
+pip install 'metaensemble[mcp]'
+```
+
+The server resolves the Ledger the way the CLI does: `METAENSEMBLE_STATE_DIR` if set, else `<cwd>/.metaensemble/state`. Point any MCP client at it with a standard directory-format entry. For Claude Code, in the project's `.mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "metaensemble-ledger": {
+      "command": "metaensemble-mcp"
+    }
+  }
+}
+```
+
+For clients that don't run servers from your project directory (Claude Desktop, Gemini CLI, an IDE), pin the project explicitly:
+
+```json
+{
+  "mcpServers": {
+    "metaensemble-ledger": {
+      "command": "metaensemble-mcp",
+      "env": {
+        "METAENSEMBLE_STATE_DIR": "/path/to/your-project/.metaensemble/state"
+      }
+    }
+  }
+}
+```
+
+Two scope caveats travel with every number the server returns, stated in the server instructions and in each tool description: counts are dispatched Runs only (work continued inside a resumed session stamps no row), and window burn is project-scoped Ledger tokens for a 5-hour bucket — never a share of a plan or subscription.
+
+---
+
 ## Status
 
 v0.3.0. All core phases complete and tested:
@@ -159,6 +200,7 @@ v0.3.0. All core phases complete and tested:
 - Typed substrate (Manifest YAML, Brief JSON, Ledger SQLite + JSONL).
 - Lifecycle hooks for SessionStart, PreToolUse, PostToolUse, Write/deliverable-sync, file-tool provenance, SubagentStop (background-dispatch finalization), and Stop, with command-injection invariants enforced by an audit test.
 - Principal-facing surface: seven slash commands plus CLI subcommands including `metaensemble setup`, `metaensemble user-setup`, `metaensemble adopt`, `metaensemble unadopt`, `metaensemble user-teardown`, `metaensemble reconcile`, `metaensemble eval`, `metaensemble stats`, and `metaensemble projects`.
+- Read-only MCP server over the Ledger (`metaensemble mcp-serve` / `metaensemble-mcp`, optional `[mcp]` extra) so any MCP client can read Runs, Executors, and window burn.
 - Multi-instance patterns (fanout / consensus / shadow / peer-review) with the `N ≥ 2` guard enforced deterministically by the PreToolUse marker hook.
 - Installer with idempotent re-runs, explicit purge modes, and a residue report after every uninstall.
 - Five-axis deliverable check on successful Runs: pytest, bandit, ruff, radon, and coverage for `.py` deliverables, plus project-configured per-axis commands (`axis_commands` in `quality.yaml`) so non-Python deliverables are checked across the same correctness/security/maintainability/complexity/coverage axes; quality runners ship in the `[test]` extras so CI runs the real tools.
